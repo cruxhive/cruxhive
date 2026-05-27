@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cruxhive-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "CruxHive MCP server — team AI knowledge governance layer"
 readme = "README.md"
 license = { text = "MIT" }
@@ -43,7 +43,12 @@ Repository = "https://github.com/cruxhive/cruxhive"
 Documentation = "https://github.com/cruxhive/cruxhive#readme"
 
 [project.scripts]
-cruxhive-mcp = "cruxhive_mcp.server:main"
+cruxhive-mcp     = "cruxhive_mcp.server:main"
+cruxhive-index   = "cruxhive_mcp.cli:index"
+cruxhive-propose = "cruxhive_mcp.cli:propose"
+cruxhive-review  = "cruxhive_mcp.cli:review"
+cruxhive-approve = "cruxhive_mcp.cli:approve"
+cruxhive-reject  = "cruxhive_mcp.cli:reject"
 
 [tool.hatch.build.targets.wheel]
 packages = ["cruxhive_mcp"]
