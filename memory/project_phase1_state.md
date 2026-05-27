@@ -28,13 +28,23 @@ Phase 1 Slice 1 shipped 2026-05-27:
 - README updated with install instructions
 - CLAUDE.md updated with new repo layout
 
-**Remaining for actual launch:**
-- `uv publish packages/mcp` — publish cruxhive-mcp to PyPI
-- `npm publish packages/cli --access=public` — publish @cruxhive/cli
-- Push cruxhive repo to github.com/cruxhive/cruxhive
-- Enable GitHub Pages (Settings → Pages → source: main/docs) for cruxhive.com
-- HN Show HN post once packages are live
+**Completed 2026-05-27:**
+- All 5 workspace projects bootstrapped: orphimusev2, OranjeBudget, Pratios, traderdeck, vueauto
+  - .llm/CONTEXT.md seeded for each
+  - bootstrap.sh ran: Cursor, Windsurf, Gemini CLI, Claude Code wired per project
+  - .claude/settings.json patched with sync-platform-memory.sh SessionStart hook
+- mozbridge committed (d6e0c311): Phase 1+2 changes
+- cruxhive committed (ac065f7): Phase 3 + landing page
+- cruxhive-mcp wheel built: packages/mcp/dist/cruxhive_mcp-0.1.0-py3-none-any.whl
 
-**Why:** Build inside mozbridge first, extract at Phase 3. Packages are ready; publication is a manual deploy step.
+**Remaining manual steps:**
+1. `git push` cruxhive repo → github.com/cruxhive/cruxhive
+2. `git push` mozbridge repo → github.com/jessin01/mozbridge
+3. Enable GitHub Pages (Settings → Pages → source: main/docs) at cruxhive.com
+4. PyPI: `cd packages/mcp && UV_PUBLISH_TOKEN=<token> uv publish` (need PyPI API token)
+5. npm: `npm login` then `cd packages/cli && npm publish --access=public`
+6. HN Show HN post once packages are live
 
-**How to apply:** Next session start in cruxhive/ repo for publishing work, or mozbridge/ for Phase 4 (semantic search).
+**Why:** Build inside mozbridge first, extract at Phase 3. Packages are ready; publication is a manual deploy step requiring credentials.
+
+**How to apply:** Next session: push both repos, enable GH Pages, then publish packages with credentials.

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cruxhive-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "CruxHive MCP server — team AI knowledge governance layer"
 readme = "README.md"
 license = { text = "MIT" }
@@ -20,6 +20,21 @@ classifiers = [
 ]
 dependencies = [
     "mcp>=1.0.0",
+]
+
+[project.optional-dependencies]
+full = [
+    "sentence-transformers>=2.7.0",
+    "sqlite-vec>=0.1.6",
+]
+ui = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "pydantic>=2.0.0",
+]
+all = [
+    "cruxhive-mcp[full]",
+    "cruxhive-mcp[ui]",
 ]
 
 [project.urls]
