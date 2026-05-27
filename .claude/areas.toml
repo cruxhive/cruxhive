@@ -1,0 +1,7 @@
+[areas]
+"packages/mcp" = "mcp"
+"packages/cli" = "cli"
+"docs/" = "docs"
+"memory/" = "memory"
+"packages/mcp/cruxhive_mcp/tools" = "mcp"
+"packages/mcp/cruxhive_mcp/ui" = "mcp"
