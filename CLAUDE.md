@@ -6,16 +6,25 @@ CruxHive is a team AI knowledge governance layer — an OSS tool being extracted
 
 **Status**: Pre-release. Dogfooding inside `Development/mozbridge/` across 6 workspace projects before extraction.
 
-## Repo layout (target, not yet built)
+## Repo layout
 
 ```
 cruxhive/
 ├── docs/
-│   ├── PLAN.md        — full architecture + phase plan
-│   └── landing.html   — marketing landing page
+│   ├── index.html     — landing page (cruxhive.com via GitHub Pages)
+│   ├── landing.html   — same content (canonical source)
+│   ├── CNAME          — cruxhive.com
+│   └── PLAN.md        — full architecture + phase plan
 ├── packages/
-│   ├── cli/           — npm @cruxhive/cli (thin Node wrapper)
-│   └── mcp/           — PyPI cruxhive-mcp (FastAPI MCP server)
+│   ├── cli/           — @cruxhive/cli npm package
+│   │   ├── package.json
+│   │   ├── bin/cruxhive.js
+│   │   └── lib/{init,sync,health}.js
+│   └── mcp/           — cruxhive-mcp PyPI package
+│       ├── pyproject.toml
+│       ├── cruxhive_mcp/server.py
+│       └── cruxhive_mcp/tools/context.py
+├── memory/            — CruxHive session memory
 ├── README.md
 └── CLAUDE.md
 ```
@@ -30,12 +39,15 @@ cruxhive/
 
 ## Where the active work lives
 
-Phase 1+2 build inside:
-- `Development/mozbridge/ai-toolkit/` — skill manifest + MCP tools
-- `Development/memory/` — org-layer context (the prototype)
+Phase 1+2 (complete):
+- `Development/mozbridge/ai-toolkit/` — skill manifest, bootstrap.sh, adapters, MCP tools (source of truth)
+- `Development/memory/` — org-layer context prototype
 - `Development/mozbridge/.llm/plans/agentfile.md` — authoritative plan (mirrored here as docs/PLAN.md)
 
-This repo becomes the primary workspace at Phase 3 (OSS extraction).
+Phase 3+ (this repo is now the primary workspace):
+- `packages/mcp/` — standalone `cruxhive-mcp` Python package (extracted from mozbridge MCP)
+- `packages/cli/` — `@cruxhive/cli` npm thin wrapper
+- Publishing: `uv publish packages/mcp` (PyPI) + `npm publish packages/cli` (npm)
 
 ## Links
 

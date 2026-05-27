@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cruxhive-mcp"
+version = "0.1.0"
+description = "CruxHive MCP server — team AI knowledge governance layer"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+keywords = ["mcp", "ai", "knowledge", "context", "llm", "claude", "cursor"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "mcp>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://cruxhive.com"
+Repository = "https://github.com/cruxhive/cruxhive"
+Documentation = "https://github.com/cruxhive/cruxhive#readme"
+
+[project.scripts]
+cruxhive-mcp = "cruxhive_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cruxhive_mcp"]

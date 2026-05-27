@@ -10,15 +10,35 @@ npx cruxhive init
 
 ---
 
+## Install
+
+```bash
+# MCP server (Python 3.11+)
+uv pip install cruxhive-mcp
+
+# Full CLI — coming soon
+npx cruxhive init
+```
+
+Wire into any MCP client — add to `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "cruxhive": { "command": "uvx", "args": ["cruxhive-mcp"], "type": "stdio" }
+  }
+}
+```
+
+**MCP tools**: `context_radar` · `context_next_slice` · `context_write_plan` · `context_sync_memory`
+
 ## Status
 
-**Pre-release.** Being dogfooded internally across 6 projects before public launch.
+**Pre-release.** Dogfooding internally across 6 projects before public launch.
 
-- [x] Domain: cruxhive.com
-- [ ] Phase 1 — Internal dogfooding + MCP skill layer
-- [ ] Phase 2 — Multi-tool support + bootstrap script
-- [ ] Phase 3 — OSS extraction + public launch
-- [ ] Phase 4 — Team sharing + semantic layer
+- [x] Phase 1 — Internal dogfooding + MCP skill layer ✓
+- [x] Phase 2 — Multi-tool support + bootstrap script ✓
+- [ ] Phase 3 — OSS extraction + public launch ← here
+- [ ] Phase 4 — Team sharing + semantic search
 
 ## Why
 
