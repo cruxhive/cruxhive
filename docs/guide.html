@@ -91,6 +91,7 @@
       <a href="#review" class="nav-link">Reviewing & approving</a>
       <a href="#search" class="nav-link">Searching</a>
       <a href="#radar" class="nav-link">Radar & next-slice</a>
+      <a href="#observability" class="nav-link">Observability</a>
 
       <div class="nav-section mt-2">Reference</div>
       <a href="#cli" class="nav-link">CLI commands</a>
@@ -436,6 +437,50 @@
         </div>
       </section>
 
+      <!-- OBSERVABILITY -->
+      <section id="observability">
+        <h2>Observability — measure what CruxHive is doing for you</h2>
+        <p>Every MCP tool call is logged locally to <code>.llm/cruxhive.db</code>. No data leaves your machine. Disable with <code>CRUXHIVE_ANALYTICS=0</code>.</p>
+
+        <h3>What gets logged</h3>
+        <ul>
+          <li>Every call to <code>context_search</code>, <code>context_propose</code>, <code>context_approve</code>, <code>context_reject</code>, <code>context_review</code>, <code>context_index</code>, <code>context_check_faithfulness</code></li>
+          <li>Which AI tool called it (detected via env vars — Claude Code, Cursor, OpenCode, Windsurf)</li>
+          <li>The search query (truncated to 500 chars), result count, and latency</li>
+          <li>Faithfulness check violations (when <code>cruxhive-mcp[full]</code> is installed)</li>
+        </ul>
+
+        <h3>Terminal dashboard</h3>
+        <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400 not-prose mb-4">
+          <p><span class="text-zinc-600">$</span> cruxhive stats</p>
+          <p class="text-zinc-500 text-xs mt-1 ml-4">→ Activity summary, by-AI-tool breakdown, top gaps, daily sparkline</p>
+          <p class="mt-2"><span class="text-zinc-600">$</span> cruxhive stats --days 30 --gaps</p>
+          <p class="text-zinc-500 text-xs mt-1 ml-4">→ Custom window with zero-result query list</p>
+          <p class="mt-2"><span class="text-zinc-600">$</span> cruxhive stats --export csv &gt; usage.csv</p>
+          <p class="text-zinc-500 text-xs mt-1 ml-4">→ Raw event log for spreadsheet analysis</p>
+        </div>
+
+        <h3>Web dashboard</h3>
+        <p><code>cruxhive ui</code> opens four tabs at <code>localhost:3847</code>:</p>
+        <table>
+          <thead><tr><th>Tab</th><th>What it shows</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Approvals</strong></td><td>Pending AI-proposed entries with approve/reject buttons</td></tr>
+            <tr><td><strong>Usage</strong></td><td>KPIs (calls · searches · hit rate · proposals · pending queue), daily sparkline</td></tr>
+            <tr><td><strong>By AI Tool</strong></td><td>Per-tool table: which model searches more, finds more, proposes more</td></tr>
+            <tr><td><strong>Gaps &amp; Staleness</strong></td><td>Zero-result queries (= what to document next), entries older than 60 days</td></tr>
+          </tbody>
+        </table>
+
+        <h3>What decisions this enables</h3>
+        <ul>
+          <li><strong>Which AI model to use:</strong> compare hit rate and proposal approval rate per tool</li>
+          <li><strong>What to document next:</strong> zero-result queries are your backlog</li>
+          <li><strong>When to audit:</strong> stale entries list flags knowledge that may give confidently-wrong answers</li>
+          <li><strong>Whether the governance loop is healthy:</strong> pending queue age &gt; 14 days = review is the bottleneck</li>
+        </ul>
+      </section>
+
       <!-- CLI REFERENCE -->
       <section id="cli">
         <h2>CLI commands</h2>
@@ -447,8 +492,9 @@
             <tr><td><code>cruxhive propose</code></td><td>Interactive: type → topic → editor → writes to <code>.llm/pending/</code></td></tr>
             <tr><td><code>cruxhive review</code></td><td>Terminal loop: approve or reject each pending entry</td></tr>
             <tr><td><code>cruxhive health</code></td><td>Knowledge base audit — pending count, stale files, MCP status</td></tr>
+            <tr><td><code>cruxhive stats</code></td><td>Observability — searches/day, hit rate, zero-result gaps, per-AI-tool comparison. Use <code>--days N</code>, <code>--gaps</code>, <code>--stale</code>, <code>--export csv</code>, <code>--clear</code></td></tr>
             <tr><td><code>cruxhive sync</code></td><td>Pull org-layer context from the configured <code>org_remote</code></td></tr>
-            <tr><td><code>cruxhive ui</code></td><td>Start web approval dashboard at <code>localhost:3847</code> (requires <code>[ui]</code> extra)</td></tr>
+            <tr><td><code>cruxhive ui</code></td><td>Start web dashboard at <code>localhost:3847</code> — Approvals + Usage + By AI Tool + Gaps tabs (requires <code>[ui]</code> extra)</td></tr>
           </tbody>
         </table>
       </section>
