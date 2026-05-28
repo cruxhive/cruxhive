@@ -2,6 +2,7 @@
 
 const { spawnSync } = require("child_process");
 const { mkdirSync, writeFileSync, existsSync, readFileSync, symlinkSync } = require("fs");
+const { homedir } = require("os");
 const { join, dirname } = require("path");
 
 const CONTEXT_TEMPLATE = (projectName, date) => `---
@@ -159,6 +160,47 @@ function wireAiTools(cwd) {
 
 // ─── main ──────────────────────────────────────────────────────────────────
 
+function bootstrapPersonal() {
+  const personalDir = join(homedir(), ".cruxhive", "personal");
+  const readme = join(personalDir, "CONTEXT.md");
+  if (existsSync(readme)) {
+    info("~/.cruxhive/personal/ already exists");
+    return;
+  }
+  mkdirSync(personalDir, { recursive: true });
+  const date = new Date().toISOString().split("T")[0];
+  writeFileSync(readme,
+    `---
+type: fact
+scope: personal
+topic: personal-preferences
+valid_at: ${date}
+confidence: high
+source: human
+approved_by: ~
+---
+
+# Personal preferences
+
+> Edit this file with your cross-project developer preferences.
+> These are indexed into every CruxHive project on this machine, but never
+> committed to any project repo. They're yours alone.
+
+## Coding style
+
+- Add your personal coding preferences here
+
+## Tools
+
+- Editor, shell, terminal preferences
+
+## Communication
+
+- How you like AI to communicate with you (terse, verbose, formal, etc.)
+`);
+  ok(`~/.cruxhive/personal/CONTEXT.md created (visible to every project)`);
+}
+
 async function init(_args) {
   const cwd = process.cwd();
   const date = new Date().toISOString().split("T")[0];
@@ -166,8 +208,12 @@ async function init(_args) {
 
   console.log(`\n\x1b[1mCruxHive init\x1b[0m — ${projectName}`);
 
+  // 0. Personal layer (one-time bootstrap, machine-wide)
+  step("0/5  Personal layer (~/.cruxhive/personal/)");
+  bootstrapPersonal();
+
   // 1. .llm/ structure
-  step("1/4  Creating .llm/ structure");
+  step("1/5  Creating .llm/ structure");
   for (const dir of [".llm", ".llm/plans", ".llm/pending", ".llm/context", ".llm/memory"]) {
     mkdirSync(join(cwd, dir), { recursive: true });
   }
@@ -190,17 +236,23 @@ async function init(_args) {
   }
 
   // 2. install cruxhive-mcp
-  step("2/4  Installing cruxhive-mcp");
+  step("2/5  Installing cruxhive-mcp");
   const installer = installMcp();
   if (installer) ok(`cruxhive-mcp installed via ${installer}`);
 
   // 3. wire .mcp.json
-  step("3/4  Wiring .mcp.json");
+  step("3/5  Wiring .mcp.json");
   wireMcp(cwd);
 
   // 4. wire AI tools
-  step("4/4  Wiring AI tools");
+  step("4/5  Wiring AI tools");
   wireAiTools(cwd);
+
+  // 5. .llm/memory/ for workspace platform_refs (filled by sync)
+  step("5/5  Workspace memory dir (.llm/memory/)");
+  const memDir = join(cwd, ".llm", "memory");
+  mkdirSync(memDir, { recursive: true });
+  ok(".llm/memory/ ready (will be filled by `cruxhive sync`)");
 
   console.log(`
 \x1b[32m✓ CruxHive initialized in ${projectName}\x1b[0m

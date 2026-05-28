@@ -102,8 +102,10 @@ def _init_schema(conn: sqlite3.Connection) -> None:
 
 # ── Indexing ──────────────────────────────────────────────────────────────────
 
-def _scan_md_files(root: str) -> list[Path]:
-    base = Path(root) / ".llm"
+PERSONAL_ROOT = Path.home() / ".cruxhive" / "personal"
+
+
+def _scan_dir(base: Path) -> list[Path]:
     if not base.exists():
         return []
     result = []
@@ -115,14 +117,31 @@ def _scan_md_files(root: str) -> list[Path]:
     return result
 
 
+def _scan_md_files(root: str) -> list[tuple[Path, str]]:
+    """Return (absolute_path, db_path) tuples.
+
+    db_path is what we store in the `path` column — relative for project files,
+    `personal:<filename>` for files under ~/.cruxhive/personal/.
+    """
+    result: list[tuple[Path, str]] = []
+    base = Path(root) / ".llm"
+    for f in _scan_dir(base):
+        result.append((f, str(f.relative_to(root))))
+    # Also include personal layer — visible from every project
+    if PERSONAL_ROOT.exists():
+        for f in _scan_dir(PERSONAL_ROOT):
+            rel = f.relative_to(PERSONAL_ROOT).as_posix()
+            result.append((f, f"personal:{rel}"))
+    return result
+
+
 def index(root: str, embedder=None) -> int:
-    """Scan .llm/ tree and upsert changed .md files. Returns count of updated entries."""
+    """Scan .llm/ tree + ~/.cruxhive/personal/ and upsert changed .md files."""
     conn = connect(root)
     files = _scan_md_files(root)
     count = 0
-    for fpath in files:
+    for fpath, rel in files:
         mtime = fpath.stat().st_mtime
-        rel = str(fpath.relative_to(root))
         row = conn.execute("SELECT mtime FROM entries WHERE path=?", (rel,)).fetchone()
         if row and row["mtime"] == mtime:
             continue

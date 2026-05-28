@@ -1,6 +1,7 @@
 "use strict";
 
 const { existsSync, readdirSync, readFileSync, statSync } = require("fs");
+const { homedir } = require("os");
 const { join } = require("path");
 
 function countFiles(dir) {
@@ -102,6 +103,20 @@ async function health(_args) {
     contextExists ? "" : "run: cruxhive init");
   fmt("MCP server", `${badge(mcpConfigured)} ${mcpConfigured ? "configured" : "not wired"}`,
     mcpConfigured ? "" : "run: cruxhive init");
+
+  console.log("  " + "─".repeat(44));
+
+  // Three-tier layer check
+  const personalDir = join(homedir(), ".cruxhive", "personal");
+  const personalCount = countFiles(personalDir);
+  const personalExists = existsSync(personalDir);
+  const platformRefs = join(memoryDir, "platform_refs.md");
+  const orgWired = existsSync(platformRefs);
+
+  fmt("Personal layer", `${badge(personalExists)} ${personalCount} file(s)`,
+    personalExists ? "~/.cruxhive/personal/" : "run: cruxhive init");
+  fmt("Org layer", `${badge(orgWired)} ${orgWired ? "platform_refs synced" : "missing"}`,
+    orgWired ? ".llm/memory/platform_refs.md" : "run: cruxhive sync");
 
   console.log("  " + "─".repeat(44));
 
