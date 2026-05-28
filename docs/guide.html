@@ -119,52 +119,55 @@
           <div class="flex gap-4 items-start">
             <div class="step-num">1</div>
             <div class="flex-1">
-              <p class="text-sm font-semibold text-zinc-200 mb-1">Init your project</p>
+              <p class="text-sm font-semibold text-zinc-200 mb-1">Install the CLI</p>
               <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400">
-                <span class="text-zinc-600">$</span> npx cruxhive init
+                <span class="text-zinc-600">$</span> npm install -g @cruxhive/cli
               </div>
-              <p class="text-xs text-zinc-500 mt-1">Creates <code class="text-violet-400">.llm/</code> structure, installs <code class="text-violet-400">cruxhive-mcp</code>, wires your AI tools.</p>
+              <p class="text-xs text-zinc-500 mt-1">Requires Node.js ≥ 18. Gives you the <code class="text-violet-400">cruxhive</code> command globally.</p>
             </div>
           </div>
 
           <div class="flex gap-4 items-start">
             <div class="step-num">2</div>
             <div class="flex-1">
-              <p class="text-sm font-semibold text-zinc-200 mb-1">Index your knowledge files</p>
+              <p class="text-sm font-semibold text-zinc-200 mb-1">Init your project</p>
               <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400">
-                <span class="text-zinc-600">$</span> cruxhive index
+                <span class="text-zinc-600">$</span> cd my-project<br>
+                <span class="text-zinc-600">$</span> cruxhive init
               </div>
-              <p class="text-xs text-zinc-500 mt-1">Scans <code class="text-violet-400">.llm/</code> and builds the SQLite search index.</p>
+              <p class="text-xs text-zinc-500 mt-1">Creates <code class="text-violet-400">.llm/</code> structure, installs <code class="text-violet-400">cruxhive-mcp</code> (Python server), wires your AI tools.</p>
             </div>
           </div>
 
           <div class="flex gap-4 items-start">
             <div class="step-num">3</div>
             <div class="flex-1">
-              <p class="text-sm font-semibold text-zinc-200 mb-1">Open your AI tool</p>
-              <p class="text-xs text-zinc-500">Reload Claude Code, OpenCode, Cursor, or Windsurf. CruxHive context loads automatically. MCP tools are available immediately.</p>
+              <p class="text-sm font-semibold text-zinc-200 mb-1">Index and verify</p>
+              <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400">
+                <span class="text-zinc-600">$</span> cruxhive index<br>
+                <span class="text-zinc-600">$</span> cruxhive health
+              </div>
+              <p class="text-xs text-zinc-500 mt-1">Builds the SQLite search index and confirms everything is wired correctly.</p>
             </div>
           </div>
 
           <div class="flex gap-4 items-start">
             <div class="step-num">4</div>
             <div class="flex-1">
-              <p class="text-sm font-semibold text-zinc-200 mb-1">Propose your first entry</p>
-              <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400">
-                <span class="text-zinc-600">$</span> cruxhive propose
-              </div>
-              <p class="text-xs text-zinc-500 mt-1">Interactive prompts: pick a type, enter a topic, write the content. Queued for your review.</p>
+              <p class="text-sm font-semibold text-zinc-200 mb-1">Reload your AI tool</p>
+              <p class="text-xs text-zinc-500">Restart Claude Code, OpenCode, Cursor, or Windsurf. CruxHive context loads automatically. MCP tools are available immediately.</p>
             </div>
           </div>
 
           <div class="flex gap-4 items-start">
             <div class="step-num">5</div>
             <div class="flex-1">
-              <p class="text-sm font-semibold text-zinc-200 mb-1">Review and approve</p>
+              <p class="text-sm font-semibold text-zinc-200 mb-1">Propose and approve your first entry</p>
               <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400">
+                <span class="text-zinc-600">$</span> cruxhive propose<br>
                 <span class="text-zinc-600">$</span> cruxhive review
               </div>
-              <p class="text-xs text-zinc-500 mt-1">Approve or reject each pending entry. Approved entries are immediately searchable by every AI tool.</p>
+              <p class="text-xs text-zinc-500 mt-1">Interactive prompts guide you through creating and approving a knowledge entry. Approved entries are immediately searchable by every AI tool.</p>
             </div>
           </div>
         </div>
@@ -176,7 +179,8 @@
         <table>
           <thead><tr><th>Dependency</th><th>Required for</th><th>Install</th></tr></thead>
           <tbody>
-            <tr><td><code>Node.js ≥ 18</code></td><td>CLI (<code>npx cruxhive</code>)</td><td>nodejs.org</td></tr>
+            <tr><td><code>Node.js ≥ 18</code></td><td>CLI (<code>cruxhive</code> command)</td><td>nodejs.org</td></tr>
+            <tr><td><code>@cruxhive/cli</code></td><td>The <code>cruxhive</code> CLI itself</td><td><code>npm install -g @cruxhive/cli</code></td></tr>
             <tr><td><code>Python ≥ 3.11</code></td><td>MCP server + search</td><td>python.org</td></tr>
             <tr><td><code>uv</code></td><td>Fast Python install (recommended)</td><td><code>curl -LsSf https://astral.sh/uv/install.sh | sh</code></td></tr>
             <tr><td><code>git</code></td><td>Version history, org sync</td><td>git-scm.com</td></tr>
@@ -190,22 +194,25 @@
       <section id="setup">
         <h2>Setup steps</h2>
 
-        <h3>1. Install cruxhive-mcp</h3>
+        <h3>1. Install the CLI</h3>
+        <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400 not-prose mb-4">
+          <p><span class="text-zinc-600">$</span> npm install -g @cruxhive/cli</p>
+        </div>
+        <p>This gives you the <code>cruxhive</code> command. The Python MCP server (<code>cruxhive-mcp</code>) is installed automatically in the next step.</p>
+        <p class="mt-2">Want to install the Python server manually first (e.g. with extras)?</p>
         <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400 not-prose mb-4">
           <p class="text-zinc-600"># Recommended (uv — zero dependency conflicts)</p>
           <p><span class="text-zinc-600">$</span> uv tool install cruxhive-mcp</p>
-          <p class="mt-2 text-zinc-600"># Or with pip</p>
-          <p><span class="text-zinc-600">$</span> pip install cruxhive-mcp</p>
-          <p class="mt-2 text-zinc-600"># Optional extras</p>
-          <p><span class="text-zinc-600">$</span> pip install "cruxhive-mcp[full]"  <span class="text-zinc-700"># + hybrid vector search</span></p>
-          <p><span class="text-zinc-600">$</span> pip install "cruxhive-mcp[ui]"    <span class="text-zinc-700"># + web dashboard</span></p>
+          <p class="mt-2 text-zinc-600"># With optional extras</p>
+          <p><span class="text-zinc-600">$</span> uv tool install "cruxhive-mcp[full]"  <span class="text-zinc-700"># + hybrid vector search</span></p>
+          <p><span class="text-zinc-600">$</span> uv tool install "cruxhive-mcp[ui]"    <span class="text-zinc-700"># + web dashboard</span></p>
         </div>
 
         <h3>2. Init a project</h3>
         <p>Run from your project root. CruxHive detects your AI tools automatically and wires itself in.</p>
         <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400 not-prose mb-4">
           <p><span class="text-zinc-600">$</span> cd my-project</p>
-          <p><span class="text-zinc-600">$</span> npx cruxhive init</p>
+          <p><span class="text-zinc-600">$</span> cruxhive init</p>
           <p class="mt-2 text-green-400">✓ Created .llm/ .llm/plans/ .llm/memory/ .llm/context/</p>
           <p class="text-green-400">✓ Created .llm/CONTEXT.md</p>
           <p class="text-green-400">✓ Detected Claude Code → patched CLAUDE.md</p>
