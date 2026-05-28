@@ -5,7 +5,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cruxhive/cruxhive"
+    "url": "git+https://github.com/cruxhive/cruxhive.git"
   },
   "homepage": "https://cruxhive.com",
   "keywords": ["ai", "mcp", "context", "knowledge", "claude", "cursor", "llm"],
@@ -13,7 +13,7 @@
     "node": ">=18"
   },
   "bin": {
-    "cruxhive": "./bin/cruxhive.js"
+    "cruxhive": "bin/cruxhive.js"
   },
   "files": [
     "bin/",
