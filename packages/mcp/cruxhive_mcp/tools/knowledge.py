@@ -8,6 +8,7 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
+from .. import events as _events
 from .. import store as _store
 from ..frontmatter import parse as _parse_fm
 
@@ -19,6 +20,7 @@ _VALID_TYPES = frozenset(
 def register(mcp: FastMCP) -> None:
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, idempotentHint=True))
+    @_events.trace("context_index")
     def context_index(project_root: str | None = None) -> str:
         """Index (or re-index) all .llm/ markdown files into .llm/cruxhive.db.
 
@@ -52,7 +54,11 @@ def register(mcp: FastMCP) -> None:
 
         Run context_index first if no results appear.
         """
+        import time as _time
         root = project_root or os.getcwd()
+        t0 = _time.perf_counter()
+        result_n = 0
+        result_paths: list[str] = []
         try:
             conn = _store.connect(root)
             bm25 = _store.search_bm25(conn, query, n * 2)
@@ -70,6 +76,8 @@ def register(mcp: FastMCP) -> None:
             if type:
                 results = [r for r in results if r.get("type") == type]
             results = results[:n]
+            result_n = len(results)
+            result_paths = [r.get("path", "") for r in results]
 
             if not results:
                 conn2 = _store.connect(root)
@@ -95,8 +103,16 @@ def register(mcp: FastMCP) -> None:
             return "\n".join(lines)
         except Exception as e:
             return f"Error searching: {e}"
+        finally:
+            ms = int((_time.perf_counter() - t0) * 1000)
+            _events.log(
+                root, "context_search",
+                query=query, result_n=result_n, ms=ms,
+                meta={"type_filter": type, "paths": result_paths[:5]} if result_paths else None,
+            )
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
+    @_events.trace("context_propose", query_kw="topic")
     def context_propose(
         type: str,
         topic: str,
@@ -162,6 +178,7 @@ def register(mcp: FastMCP) -> None:
         )
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+    @_events.trace("context_review")
     def context_review(project_root: str | None = None) -> str:
         """List all pending AI-proposed knowledge entries awaiting human approval."""
         root = project_root or os.getcwd()
@@ -196,6 +213,7 @@ def register(mcp: FastMCP) -> None:
             return f"Error: {e}"
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True))
+    @_events.trace("context_approve", query_kw="path")
     def context_approve(
         path: str,
         approver: str,
@@ -219,6 +237,7 @@ def register(mcp: FastMCP) -> None:
             return f"Error: {e}"
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    @_events.trace("context_reject", query_kw="path")
     def context_reject(
         path: str,
         project_root: str | None = None,
@@ -240,6 +259,7 @@ def register(mcp: FastMCP) -> None:
             return f"Error: {e}"
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+    @_events.trace("context_check_faithfulness")
     def context_check_faithfulness(
         response: str,
         project_root: str | None = None,
@@ -281,6 +301,11 @@ def register(mcp: FastMCP) -> None:
 
             constraints = [r["content"] for r in rows]
             violations = check(response, constraints)
+            _events.log(
+                root, "faithfulness.result",
+                result_n=len(violations),
+                meta={"constraints_checked": len(constraints)},
+            )
 
             if not violations:
                 return (

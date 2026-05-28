@@ -1,21 +1,12 @@
 # Active — CruxHive
 
-**Updated**: 2026-05-27
+**Updated**: 2026-05-28
 
-## Now
+## Pending
 
-**Publish** — packages are built, credentials needed:
-- [ ] `UV_PUBLISH_TOKEN=pypi-xxx uv publish` in `packages/mcp/`
-- [ ] `npm login` + `npm publish --access=public` in `packages/cli/`
-- [ ] cruxhive.com live (make repo public + GitHub Pages, or Vercel)
-- [ ] HN Show HN post
-
-## Next
-
-**Phase 5 — Mozbridge operational context feed**
-- Deploy telemetry → automatic `source: mozbridge-feed` knowledge entries
-- Build flakiness, secret expiry → surfaced as context without manual proposal
-- See: `docs/PLAN.md` Phase 5
+- [ ] cruxhive.com live — make repo public + enable GitHub Pages (or Vercel)
+- [ ] Show HN post — after repo is public
+- [ ] Phase 5 — Mozbridge operational context feed (deploy telemetry → auto knowledge entries)
 
 ## Done
 
@@ -23,4 +14,8 @@
 - [x] Phase 2 — Multi-tool bootstrap (Cursor, Windsurf, Gemini, OpenCode)
 - [x] Phase 3 — OSS extraction (`packages/mcp/`, `packages/cli/`)
 - [x] Phase 4 — SQLite FTS5 search, approval workflow, NLI faithfulness, web UI
-- [x] All 6 workspace projects bootstrapped (Claude Code, OpenCode, Cursor, Windsurf, Gemini)
+- [x] All 6 workspace projects bootstrapped
+- [x] `cruxhive-mcp@0.3.0` published to PyPI
+- [x] `@cruxhive/cli@0.3.1` published to npm
+- [x] Landing page + docs/guide.html live locally
+- [x] init polish — uv tool install, 5-tool wiring, mcp entry fix, already-installed check

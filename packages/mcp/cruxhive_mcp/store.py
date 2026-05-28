@@ -33,6 +33,13 @@ def connect(root: str) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     _try_load_vec(conn)
     _init_schema(conn)
+    # Also initialize the events log schema so stats queries work
+    # against any store connection.
+    try:
+        from . import events as _events
+        _events._init(conn)
+    except Exception:
+        pass
     return conn
 
 
