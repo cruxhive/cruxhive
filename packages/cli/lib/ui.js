@@ -15,9 +15,13 @@ function openBrowser(url) {
   spawnSync(cmd, [url], { stdio: "ignore" });
 }
 
-function checkUvicorn() {
-  const r = spawnSync("uvicorn", ["--version"], { stdio: "pipe" });
-  return r.status === 0;
+function uvicornCmd() {
+  // Prefer the uvicorn inside the uv-managed cruxhive-mcp tool environment
+  const uv = spawnSync("uv", ["tool", "run", "--from", "cruxhive-mcp", "uvicorn", "--version"], { stdio: "pipe" });
+  if (uv.status === 0) return ["uv", "tool", "run", "--from", "cruxhive-mcp", "uvicorn"];
+  const direct = spawnSync("uvicorn", ["--version"], { stdio: "pipe" });
+  if (direct.status === 0) return ["uvicorn"];
+  return null;
 }
 
 async function ui(args) {
@@ -31,18 +35,21 @@ async function ui(args) {
     console.log(`       Run: \x1b[36mcruxhive index\x1b[0m (or context_index MCP tool)\n`);
   }
 
-  if (!checkUvicorn()) {
+  const uvcmd = uvicornCmd();
+  if (!uvcmd) {
     err("uvicorn not found — install the [ui] extra:");
-    console.log(`\n       \x1b[36mpip install "cruxhive-mcp[ui]"\x1b[0m\n`);
+    console.log(`\n       \x1b[36muv tool install "cruxhive-mcp[ui]"\x1b[0m\n`);
     process.exit(1);
   }
 
   const url = `http://localhost:${PORT}`;
   info(`Starting approval queue at ${url}`);
 
+  const [bin, ...binArgs] = uvcmd;
   const proc = spawn(
-    "uvicorn",
+    bin,
     [
+      ...binArgs,
       "cruxhive_mcp.ui:app",
       "--host", "0.0.0.0",
       "--port", String(PORT),
