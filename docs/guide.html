@@ -410,23 +410,31 @@
 
       <!-- RADAR -->
       <section id="radar">
-        <h2>Radar &amp; next-slice</h2>
+        <h2>Slash commands (cross-tool)</h2>
+        <p><code>cruxhive init</code> writes five slash commands into <strong>both</strong> <code>.claude/commands/</code> (Claude Code) and <code>.opencode/commands/</code> (OpenCode). Same command name, same behaviour, same MCP tool under the hood.</p>
 
-        <h3>/radar</h3>
-        <p>Scans recent git commits, maps them to plan areas, surfaces work that has no plan behind it. Run after a batch of commits to answer: <em>"does everything I built have intent registered?"</em></p>
+        <table>
+          <thead><tr><th>Slash</th><th>What it does</th><th>Calls</th></tr></thead>
+          <tbody>
+            <tr><td><code>/radar [days]</code></td><td>Scan recent commits, map to plan areas, surface work with no plan</td><td><code>context_radar</code></td></tr>
+            <tr><td><code>/next-slice [area]</code></td><td>Find first unblocked work item from active plan</td><td><code>context_next_slice</code></td></tr>
+            <tr><td><code>/review</code></td><td>List CruxHive proposals awaiting approval</td><td><code>context_review</code></td></tr>
+            <tr><td><code>/propose</code></td><td>Interactive: capture a new knowledge entry</td><td><code>context_propose</code></td></tr>
+            <tr><td><code>/write-plan</code></td><td>Draft a new plan file under <code>.llm/plans/</code></td><td><code>context_write_plan</code></td></tr>
+          </tbody>
+        </table>
+
+        <p class="mt-4 text-sm text-zinc-400">Cursor and Windsurf don't have a slash command system, but the same MCP tools are reachable via natural language ("run radar", "what's the next slice for auth?") — they'll route to the right tool.</p>
+
+        <h3>Examples</h3>
         <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400 not-prose mb-4">
-          <p class="text-zinc-600"># In your AI tool's session (Claude Code skill):</p>
+          <p class="text-zinc-600"># Same syntax works in Claude Code and OpenCode:</p>
           <p>/radar            <span class="text-zinc-700"># last 7 days</span></p>
           <p>/radar 30         <span class="text-zinc-700"># last 30 days</span></p>
-          <p class="mt-2 text-zinc-600"># Or via MCP tool from any AI tool:</p>
+          <p>/next-slice              <span class="text-zinc-700"># first unchecked item</span></p>
+          <p>/next-slice auth         <span class="text-zinc-700"># filter to area</span></p>
+          <p class="mt-2 text-zinc-600"># From any MCP-aware tool (Cursor, Windsurf, scripts):</p>
           <p>context_radar(days=7)</p>
-        </div>
-
-        <h3>/next-slice</h3>
-        <p>Reads <code>.llm/plans/active.md</code>, finds the first unchecked item with no blocker. Use this at the start of every session to orient.</p>
-        <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400 not-prose mb-4">
-          <p>/next-slice              <span class="text-zinc-700"># first unchecked item across all areas</span></p>
-          <p>/next-slice auth         <span class="text-zinc-700"># filter to a specific area</span></p>
           <p>context_next_slice(area=<span class="text-green-300">"cicd"</span>)</p>
         </div>
 

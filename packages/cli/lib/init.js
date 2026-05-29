@@ -141,6 +141,80 @@ function patchOrSymlink(filePath, label) {
   }
 }
 
+// ─── slash command parity (Claude Code + OpenCode) ────────────────────────
+
+const SLASH_COMMANDS = {
+  radar: {
+    description: "Plan coverage scan — surface git work that has no plan behind it. Usage: /radar [days]",
+    body: `Call the \`context_radar\` MCP tool to scan recent git history and map commits to plan areas.
+
+- If a number was passed as the first argument, pass it as the \`days\` parameter.
+- Otherwise use the default (7 days).
+
+Present the report output verbatim — it's already formatted for terminal display.
+
+If there are UNCOVERED items, suggest \`/write-plan <area>\` to register them. If items are UNCLASSIFIED, suggest adding entries to \`.claude/areas.toml\` or \`.cruxhive/areas.toml\`.`,
+  },
+  "next-slice": {
+    description: "Find the next unblocked work slice from the active plan. Usage: /next-slice [area]",
+    body: `Call the \`context_next_slice\` MCP tool.
+
+- If an argument was passed, use it as the \`area\` parameter (a plan keyword like \`cicd\` or \`auth\`).
+- Otherwise leave \`area\` empty — the tool reads \`.llm/plans/active.md\`.
+
+Present the result as-is. Do NOT start implementing — wait for the user to confirm scope.`,
+  },
+  review: {
+    description: "List CruxHive proposals awaiting human approval.",
+    body: `Call the \`context_review\` MCP tool and present its output verbatim.
+
+If the queue is non-empty, ask the user whether they'd like to approve or reject each entry interactively — for each, propose calling \`context_approve\` with their git username or \`context_reject\`.`,
+  },
+  propose: {
+    description: "Propose a new knowledge entry for human review. Usage: /propose",
+    body: `Help the user write a new CruxHive knowledge entry. Ask for:
+
+1. **Type** — one of: fact, decision, plan, pattern, constraint, research, outcome
+2. **Topic** — one to three words (e.g. "auth", "database-schema", "ci-cd-tokens")
+3. **Scope** — personal | project | org (default: project)
+4. **Content** — the body. Explain what's true, when, and why.
+
+Then call the \`context_propose\` MCP tool with those arguments. After it returns, remind the user that the entry is pending until approved via \`/review\` or \`cruxhive ui\`.`,
+  },
+  "write-plan": {
+    description: "Write a new plan file to .llm/plans/ and register it in active.md.",
+    body: `Help the user draft a plan. Ask for:
+
+1. **Plan name** — kebab-case (e.g. \`cicd-fleet-architecture\`, \`auth-rewrite\`)
+2. **Goal** — one sentence
+3. **Phases** — phase headings with bulleted unchecked tasks (\`- [ ] ...\`)
+4. **Open questions** — anything unresolved
+
+Then call the \`context_write_plan\` MCP tool with \`plan_name\` and \`content\` (the full markdown).`,
+  },
+};
+
+function writeCommandFile(filePath, name, def, dialect) {
+  if (existsSync(filePath)) {
+    info(`${dialect}/commands/${name}.md already exists — skipped`);
+    return;
+  }
+  mkdirSync(dirname(filePath), { recursive: true });
+  // Claude Code uses { name, description }; OpenCode uses { description }
+  const fm = dialect === "claude"
+    ? `---\nname: ${name}\ndescription: ${def.description}\n---\n\n`
+    : `---\ndescription: ${def.description}\n---\n\n`;
+  writeFileSync(filePath, fm + def.body + "\n");
+  ok(`${dialect}/commands/${name}.md created`);
+}
+
+function wireSlashCommands(cwd) {
+  for (const [name, def] of Object.entries(SLASH_COMMANDS)) {
+    writeCommandFile(join(cwd, ".claude", "commands", `${name}.md`), name, def, ".claude");
+    writeCommandFile(join(cwd, ".opencode", "commands", `${name}.md`), name, def, ".opencode");
+  }
+}
+
 function wireAiTools(cwd) {
   const tools = [
     // Claude Code
@@ -232,11 +306,11 @@ async function init(_args) {
   console.log(`\n\x1b[1mCruxHive init\x1b[0m — ${projectName}`);
 
   // 0. Personal layer (one-time bootstrap, machine-wide)
-  step("0/6  Personal layer (~/.cruxhive/personal/)");
+  step("0/7  Personal layer (~/.cruxhive/personal/)");
   bootstrapPersonal();
 
   // 1. .llm/ structure
-  step("1/6  Creating .llm/ structure");
+  step("1/7  Creating .llm/ structure");
   for (const dir of [".llm", ".llm/plans", ".llm/pending", ".llm/context", ".llm/memory"]) {
     mkdirSync(join(cwd, dir), { recursive: true });
   }
@@ -259,26 +333,30 @@ async function init(_args) {
   }
 
   // 2. install cruxhive-mcp
-  step("2/6  Installing cruxhive-mcp");
+  step("2/7  Installing cruxhive-mcp");
   const installer = installMcp();
   if (installer) ok(`cruxhive-mcp installed via ${installer}`);
 
   // 3. wire .mcp.json
-  step("3/6  Wiring .mcp.json");
+  step("3/7  Wiring .mcp.json");
   wireMcp(cwd);
 
   // 4. wire AI tools
-  step("4/6  Wiring AI tools");
+  step("4/7  Wiring AI tools");
   wireAiTools(cwd);
 
-  // 5. .llm/memory/ for workspace platform_refs (filled by sync)
-  step("5/6  Workspace memory dir (.llm/memory/)");
+  // 5. Slash command parity — same commands work in Claude Code AND OpenCode
+  step("5/7  Wiring slash commands (Claude Code + OpenCode)");
+  wireSlashCommands(cwd);
+
+  // 6. .llm/memory/ for workspace platform_refs (filled by sync)
+  step("6/7  Workspace memory dir (.llm/memory/)");
   const memDir = join(cwd, ".llm", "memory");
   mkdirSync(memDir, { recursive: true });
   ok(".llm/memory/ ready (will be filled by `cruxhive sync`)");
 
-  // 6. .gitignore — keep cruxhive.db out of git
-  step("6/6  .gitignore");
+  // 7. .gitignore — keep cruxhive.db out of git
+  step("7/7  .gitignore");
   patchGitignore(cwd);
 
   console.log(`
