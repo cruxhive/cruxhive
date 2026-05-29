@@ -411,7 +411,7 @@
       <!-- RADAR -->
       <section id="radar">
         <h2>Slash commands (cross-tool)</h2>
-        <p><code>cruxhive init</code> writes five slash commands into <strong>both</strong> <code>.claude/commands/</code> (Claude Code) and <code>.opencode/commands/</code> (OpenCode). Same command name, same behaviour, same MCP tool under the hood.</p>
+        <p><code>cruxhive init</code> writes six slash commands into <strong>both</strong> <code>.claude/commands/</code> (Claude Code) and <code>.opencode/commands/</code> (OpenCode). Same command name, same behaviour, same MCP tool under the hood.</p>
 
         <table>
           <thead><tr><th>Slash</th><th>What it does</th><th>Calls</th></tr></thead>
@@ -421,8 +421,11 @@
             <tr><td><code>/review</code></td><td>List CruxHive proposals awaiting approval</td><td><code>context_review</code></td></tr>
             <tr><td><code>/propose</code></td><td>Interactive: capture a new knowledge entry</td><td><code>context_propose</code></td></tr>
             <tr><td><code>/write-plan</code></td><td>Draft a new plan file under <code>.llm/plans/</code></td><td><code>context_write_plan</code></td></tr>
+            <tr><td><code>/extract</code></td><td>Distill the current session into candidate entries — dedup, classify, queue for review</td><td><code>context_search</code> + <code>context_propose</code></td></tr>
           </tbody>
         </table>
+
+        <p class="mt-4 text-sm text-zinc-400"><code>/extract</code> is the auto-capture loop with the approval gate intact: the AI proposes, you approve. Run it at the end of a long conversation to surface durable facts before they're lost.</p>
 
         <p class="mt-4 text-sm text-zinc-400">Cursor and Windsurf don't have a slash command system, but the same MCP tools are reachable via natural language ("run radar", "what's the next slice for auth?") — they'll route to the right tool.</p>
 

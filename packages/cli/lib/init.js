@@ -192,6 +192,76 @@ Then call the \`context_propose\` MCP tool with those arguments. After it return
 
 Then call the \`context_write_plan\` MCP tool with \`plan_name\` and \`content\` (the full markdown).`,
   },
+  extract: {
+    description: "Distill the current conversation into proposed CruxHive knowledge entries. Dedupes, classifies, and queues for /review.",
+    body: `You are extracting durable knowledge from the conversation so far. Make zero file changes directly — only call \`context_search\` (read) and \`context_propose\` (queue for human approval).
+
+## Step 1 — Identify candidates
+
+Re-read the conversation. List items that meet ALL of:
+
+- Concrete and stable (not "let me try X" or "we considered Y")
+- Established by the user (or confirmed by their approval)
+- Worth referencing in future sessions (not session-specific debugging output)
+- Not a secret, token, password, or other credential — silently skip these
+
+Classify each as exactly one of:
+
+- **fact** — objective truth ("API runs on port 8000")
+- **decision** — a choice made between alternatives ("we use PostgreSQL, not MySQL")
+- **constraint** — a rule that should not be violated ("never log raw tokens")
+- **pattern** — a reusable approach ("for new features, scaffold via stack.sh")
+- **plan** — multi-step intent for future work
+- **research** — a finding from investigation
+- **outcome** — a result observed
+
+Skip: questions, half-thoughts, debugging traces, hypotheticals, things you (the AI) said that the user did not confirm.
+
+If the conversation has fewer than 5 substantive exchanges, stop and say: "Not enough conversation to extract from yet."
+
+## Step 2 — Dedup against existing knowledge
+
+For EACH candidate, call \`context_search\` with the candidate's topic plus 2–3 keywords. Look at the top result.
+
+- If a similar entry already exists AND the new info is the same → mark \`[DUP]\` (skip).
+- If a similar entry exists BUT the new info refines or contradicts it → mark \`[UPDATE: <path>]\`.
+- If no similar entry → mark \`[NEW]\`.
+
+## Step 3 — Present for review
+
+Print candidates as a numbered list, terse:
+
+\`\`\`
+1. [NEW] [decision] auth — Logto OIDC for all user-facing apps
+2. [NEW] [constraint] secrets — never commit API keys to git (use Vault)
+3. [DUP] hetzner — already covered in .llm/memory/platform_refs.md
+4. [UPDATE: .llm/decisions/db.md] [decision] database — switching from MySQL to PostgreSQL
+5. [NEW] [fact] hosts — platform IP is 91.99.212.250
+\`\`\`
+
+Then ask exactly: "Which would you like to propose? (numbers, 'all-new', or 'none')"
+
+## Step 4 — File approved candidates
+
+For each user-selected \`[NEW]\` candidate, call \`context_propose\` with:
+
+- \`type\` — the classification
+- \`topic\` — 1-3 words (e.g. "auth", "database-schema")
+- \`content\` — the full body, including context and the *why*. NOT just the headline.
+- \`scope\` — \`personal\` if it's a developer preference, \`org\` if it crosses projects, otherwise \`project\` (default)
+
+For \`[UPDATE]\` candidates, do NOT call \`context_propose\`. Instead show the existing entry's path and suggest the user edit it directly.
+
+## Step 5 — Wrap up
+
+After all approved candidates are filed, print a one-line summary:
+
+> Filed N new candidate(s) to \`.llm/pending/\`. Run \`/review\` (or \`cruxhive ui\`) to approve or reject.
+
+## Output style
+
+Terse. No prose explanations. The candidates list + the review question + the final summary line are the only required output.`,
+  },
 };
 
 function writeCommandFile(filePath, name, def, dialect) {
