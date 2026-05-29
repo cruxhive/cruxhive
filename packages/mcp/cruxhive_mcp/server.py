@@ -12,9 +12,11 @@ from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
+from . import events
 from .tools import register_all
 
 mcp = FastMCP("cruxhive")
+events.attach_mcp(mcp)
 register_all(mcp)
 
 

@@ -158,6 +158,29 @@ function wireAiTools(cwd) {
   for (const t of tools) t.wire();
 }
 
+function patchGitignore(cwd) {
+  const ig = join(cwd, ".gitignore");
+  const entries = [
+    "# CruxHive: local knowledge index + usage log (do not commit)",
+    ".llm/cruxhive.db",
+    ".llm/cruxhive.db-shm",
+    ".llm/cruxhive.db-wal",
+    ".llm/pending/.cache",
+  ];
+  if (!existsSync(ig)) {
+    writeFileSync(ig, entries.join("\n") + "\n");
+    ok(".gitignore created with CruxHive entries");
+    return;
+  }
+  const cur = readFileSync(ig, "utf8");
+  if (cur.includes("cruxhive.db")) {
+    info(".gitignore already has CruxHive entries");
+    return;
+  }
+  writeFileSync(ig, cur.trimEnd() + "\n\n" + entries.join("\n") + "\n");
+  ok(".gitignore patched with CruxHive entries");
+}
+
 // ─── main ──────────────────────────────────────────────────────────────────
 
 function bootstrapPersonal() {
@@ -209,11 +232,11 @@ async function init(_args) {
   console.log(`\n\x1b[1mCruxHive init\x1b[0m — ${projectName}`);
 
   // 0. Personal layer (one-time bootstrap, machine-wide)
-  step("0/5  Personal layer (~/.cruxhive/personal/)");
+  step("0/6  Personal layer (~/.cruxhive/personal/)");
   bootstrapPersonal();
 
   // 1. .llm/ structure
-  step("1/5  Creating .llm/ structure");
+  step("1/6  Creating .llm/ structure");
   for (const dir of [".llm", ".llm/plans", ".llm/pending", ".llm/context", ".llm/memory"]) {
     mkdirSync(join(cwd, dir), { recursive: true });
   }
@@ -236,23 +259,27 @@ async function init(_args) {
   }
 
   // 2. install cruxhive-mcp
-  step("2/5  Installing cruxhive-mcp");
+  step("2/6  Installing cruxhive-mcp");
   const installer = installMcp();
   if (installer) ok(`cruxhive-mcp installed via ${installer}`);
 
   // 3. wire .mcp.json
-  step("3/5  Wiring .mcp.json");
+  step("3/6  Wiring .mcp.json");
   wireMcp(cwd);
 
   // 4. wire AI tools
-  step("4/5  Wiring AI tools");
+  step("4/6  Wiring AI tools");
   wireAiTools(cwd);
 
   // 5. .llm/memory/ for workspace platform_refs (filled by sync)
-  step("5/5  Workspace memory dir (.llm/memory/)");
+  step("5/6  Workspace memory dir (.llm/memory/)");
   const memDir = join(cwd, ".llm", "memory");
   mkdirSync(memDir, { recursive: true });
   ok(".llm/memory/ ready (will be filled by `cruxhive sync`)");
+
+  // 6. .gitignore — keep cruxhive.db out of git
+  step("6/6  .gitignore");
+  patchGitignore(cwd);
 
   console.log(`
 \x1b[32m✓ CruxHive initialized in ${projectName}\x1b[0m

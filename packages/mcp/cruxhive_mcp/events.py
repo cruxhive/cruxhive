@@ -30,8 +30,40 @@ _client_ver: contextvars.ContextVar[str] = contextvars.ContextVar(
     "_cruxhive_client_ver", default=""
 )
 
+# Optional reference to the FastMCP instance for MCP-protocol clientInfo lookup.
+# Set by server.py at startup. Falls back to env-var detection if missing.
+_mcp_ref: list = []
+
 DB_PATH = ".llm/cruxhive.db"
 MAX_ROWS = 100_000  # cap log size, trim oldest beyond this
+
+
+def attach_mcp(mcp_instance) -> None:
+    """Register the FastMCP instance so we can read clientInfo via the protocol."""
+    _mcp_ref.clear()
+    _mcp_ref.append(mcp_instance)
+
+
+def _client_from_mcp() -> tuple[str, str]:
+    """Read clientInfo from the active MCP session, if available.
+
+    FastMCP exposes the InitializeRequestParams via session.client_params, which
+    carries clientInfo.name / clientInfo.version. Returns ('', '') outside a
+    request or if the MCP ref isn't set.
+    """
+    if not _mcp_ref:
+        return ("", "")
+    try:
+        ctx = _mcp_ref[0].get_context()
+        params = ctx.session.client_params
+        if params and params.clientInfo:
+            return (
+                params.clientInfo.name or "",
+                params.clientInfo.version or "",
+            )
+    except Exception:
+        pass
+    return ("", "")
 
 
 def _enabled() -> bool:
@@ -63,6 +95,9 @@ def set_client(name: str, version: str = "") -> str:
     sid = uuid.uuid4().hex[:12]
     _session_id.set(sid)
     if not name:
+        # Prefer real MCP clientInfo, then env-var inference
+        name, version = _client_from_mcp()
+    if not name:
         name, version = _infer_client_from_env()
     _client_name.set(name or "unknown")
     _client_ver.set(version or "")
@@ -70,10 +105,23 @@ def set_client(name: str, version: str = "") -> str:
 
 
 def _ensure_session() -> tuple[str, str, str]:
+    """Return (session_id, client_name, client_ver), refreshing client info
+    from MCP clientInfo on each call so a long-lived process re-tags events
+    correctly when the client changes (e.g. server reused across connections).
+    """
     sid = _session_id.get()
+    cname = _client_name.get()
     if not sid:
         sid = set_client("")
-    return sid, _client_name.get(), _client_ver.get()
+        return sid, _client_name.get(), _client_ver.get()
+    # On every call, try a fresh read of MCP clientInfo so the tag tracks the
+    # real caller. Only overwrite if we got a non-empty result.
+    mcp_name, mcp_ver = _client_from_mcp()
+    if mcp_name and mcp_name != cname:
+        _client_name.set(mcp_name)
+        _client_ver.set(mcp_ver)
+        cname = mcp_name
+    return sid, cname, _client_ver.get()
 
 
 def _db(root: str) -> sqlite3.Connection:

@@ -6,3 +6,8 @@ node_modules/
 dist/
 .venv/
 *.egg-info/
+
+# CruxHive: local knowledge index + usage log (do not commit)
+.llm/cruxhive.db
+.llm/cruxhive.db-shm
+.llm/cruxhive.db-wal

@@ -1,6 +1,6 @@
 {
   "name": "@cruxhive/cli",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "CruxHive — team AI knowledge governance layer",
   "license": "MIT",
   "repository": {
@@ -17,7 +17,8 @@
   },
   "files": [
     "bin/",
-    "lib/"
+    "lib/",
+    "README.md"
   ],
   "dependencies": {}
 }
