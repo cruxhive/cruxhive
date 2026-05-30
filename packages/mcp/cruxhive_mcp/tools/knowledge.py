@@ -75,14 +75,17 @@ def register(mcp: FastMCP) -> None:
         try:
             conn = _store.connect(root)
             bm25 = _store.search_bm25(conn, query, n * 2)
-            results = bm25
+            vec_results: list[dict] = []
 
             from .. import embedder as _emb
             if _emb.is_available():
                 qvec = _emb.encode_bytes(query)
                 if qvec:
                     vec_results = _store.search_vec(conn, qvec, n * 2)
-                    results = _store.rrf_fuse(bm25, vec_results)
+
+            # Always go through rrf_fuse so entity + recency boosts apply,
+            # even when no vector results are available.
+            results = _store.rrf_fuse(bm25, vec_results, conn=conn, query=query)
 
             conn.close()
 
@@ -161,6 +164,7 @@ def register(mcp: FastMCP) -> None:
         topic: str,
         content: str,
         scope: str = "project",
+        ephemeral: bool = False,
         project_root: str | None = None,
     ) -> str:
         """PROPOSE a new project knowledge entry for the human to approve.
@@ -204,6 +208,7 @@ def register(mcp: FastMCP) -> None:
             fpath = pending_dir / f"{type}_{slug}_{suffix}.md"
             suffix += 1
 
+        source_val = "ephemeral" if ephemeral else "ai-proposed"
         entry = (
             f"---\n"
             f"type: {type}\n"
@@ -211,8 +216,8 @@ def register(mcp: FastMCP) -> None:
             f"topic: {topic}\n"
             f"valid_at: {date}\n"
             f"invalid_at: ~\n"
-            f"confidence: medium\n"
-            f"source: ai-proposed\n"
+            f"confidence: {'low' if ephemeral else 'medium'}\n"
+            f"source: {source_val}\n"
             f"approved_by: ~\n"
             f"---\n\n"
             f"{content.strip()}\n"

@@ -140,6 +140,16 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             INSERT INTO entries_fts(rowid, topic, content)
             VALUES (new.id, COALESCE(new.topic,''), new.content);
         END;
+        CREATE TABLE IF NOT EXISTS entry_entities (
+            entry_id INTEGER NOT NULL,
+            entity   TEXT    NOT NULL,
+            PRIMARY KEY (entry_id, entity)
+        );
+        CREATE INDEX IF NOT EXISTS idx_entry_entities_entity
+            ON entry_entities(entity);
+        CREATE TRIGGER IF NOT EXISTS _entities_ad AFTER DELETE ON entries BEGIN
+            DELETE FROM entry_entities WHERE entry_id = old.id;
+        END;
     """)
     # sqlite-vec virtual table — only if extension loaded
     try:
@@ -187,8 +197,61 @@ def _scan_md_files(root: str) -> list[tuple[Path, str]]:
     return result
 
 
+EPHEMERAL_TTL_DAYS = 7  # source: ephemeral entries auto-expire after this many days
+
+
+# ── Entity extraction ────────────────────────────────────────────────────────
+#
+# Cheap regex-based entity tagging. Used at index time to populate
+# entry_entities, then at search time to boost results that share entities
+# with the query. No NER models, no new dependencies.
+
+_ENTITY_PATTERNS = [
+    re.compile(r"\b[a-z][a-z0-9]+(?:_[a-z0-9]+){1,5}\b"),   # snake_case (function/var names)
+    re.compile(r"\b[A-Z][A-Z0-9_]{3,}\b"),                   # ALL_CAPS constants / env vars
+    re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),              # IPv4
+    re.compile(r"\b[a-z0-9-]+\.[a-z0-9-]+(?:\.[a-z0-9-]+)+\b"),  # hostnames (a.b.c)
+    re.compile(r"\b[\w-]+\.(?:py|js|ts|tsx|jsx|md|sh|sql|yml|yaml|toml|json|html|css)\b"),  # files w/ extension
+]
+_ENTITY_STOPWORDS = frozenset({
+    # noise-y snake_case from common words
+    "should_be", "could_be", "must_be", "would_be",
+    "to_do", "to_be",
+})
+
+
+def extract_entities(text: str, max_entities: int = 40) -> set[str]:
+    """Pull a bounded set of canonical entities from a piece of text."""
+    out: set[str] = set()
+    for pat in _ENTITY_PATTERNS:
+        for m in pat.finditer(text or ""):
+            tok = m.group(0)
+            if tok.lower() in _ENTITY_STOPWORDS:
+                continue
+            out.add(tok)
+            if len(out) >= max_entities:
+                return out
+    return out
+
+
+def _ephemeral_expired(meta: dict) -> bool:
+    """Return True if this is an ephemeral entry past its TTL."""
+    if (meta.get("source") or "").strip().lower() != "ephemeral":
+        return False
+    try:
+        d = datetime.date.fromisoformat((meta.get("valid_at") or "")[:10])
+        return (datetime.date.today() - d).days > EPHEMERAL_TTL_DAYS
+    except Exception:
+        return False
+
+
 def index(root: str, embedder=None) -> int:
-    """Scan .llm/ tree + ~/.cruxhive/personal/ and upsert changed .md files."""
+    """Scan .llm/ tree + ~/.cruxhive/personal/ and upsert changed .md files.
+
+    Side-effect: entries with `source: ephemeral` and `valid_at` older than
+    EPHEMERAL_TTL_DAYS get their on-disk frontmatter stamped with
+    `invalid_at: <today>`, which removes them from the index on this pass.
+    """
     conn = connect(root)
     files = _scan_md_files(root)
     count = 0
@@ -199,6 +262,15 @@ def index(root: str, embedder=None) -> int:
             continue
         text = fpath.read_text(encoding="utf-8", errors="replace")
         meta, body = _parse_fm(text)
+        # Auto-expire ephemeral entries past their TTL — stamp invalid_at on disk
+        if _ephemeral_expired(meta) and rel.startswith(".llm/"):
+            today = datetime.date.today().isoformat()
+            new_text = _set_field(text, "invalid_at", today)
+            try:
+                fpath.write_text(new_text, encoding="utf-8")
+                meta["invalid_at"] = today  # so the next branch fires
+            except Exception:
+                pass  # readonly fs / personal layer — skip
         if not _is_null(meta.get("invalid_at")):
             # Deprecated entry — remove from index
             conn.execute("DELETE FROM entries WHERE path=?", (rel,))
@@ -229,17 +301,39 @@ def index(root: str, embedder=None) -> int:
             meta.get("confidence"), meta.get("source"), meta.get("approved_by"),
             text, mtime,
         ))
-        if vec_bytes is not None:
+        # Resolve the row id once — used for both vector + entity updates
+        try:
+            row_id = conn.execute(
+                "SELECT id FROM entries WHERE path=?", (rel,)
+            ).fetchone()["id"]
+        except Exception:
+            row_id = None
+
+        if vec_bytes is not None and row_id is not None:
             try:
-                row_id = conn.execute(
-                    "SELECT id FROM entries WHERE path=?", (rel,)
-                ).fetchone()["id"]
                 conn.execute(
                     "INSERT OR REPLACE INTO entry_vecs(id, vec) VALUES (?,?)",
                     (row_id, vec_bytes),
                 )
             except Exception:
                 pass
+
+        # Refresh entity tags for this entry — wipe + reinsert is simplest
+        if row_id is not None:
+            try:
+                conn.execute("DELETE FROM entry_entities WHERE entry_id=?", (row_id,))
+                # Scan topic + body. Cap body slice to keep cost bounded.
+                entities = extract_entities(
+                    f"{meta.get('topic','')} {body[:4096]}"
+                )
+                if entities:
+                    conn.executemany(
+                        "INSERT OR IGNORE INTO entry_entities(entry_id, entity) VALUES (?,?)",
+                        [(row_id, e) for e in entities],
+                    )
+            except Exception:
+                pass
+
         count += 1
     conn.commit()
     conn.close()
@@ -285,8 +379,51 @@ def search_vec(conn: sqlite3.Connection, query_vec_bytes: bytes, n: int = 10) ->
         return []
 
 
-def rrf_fuse(bm25: list[dict], vec: list[dict], k: int = 60) -> list[dict]:
-    """Reciprocal Rank Fusion. k=60 is the research-validated default."""
+def _recency_boost(mtime: float | None, now: float | None = None) -> float:
+    """Banded recency multiplier added on top of search score.
+
+    ≤7d → +0.20, ≤30d → +0.10, ≤90d → +0.05, else 0.
+    """
+    if not mtime:
+        return 0.0
+    import time as _t
+    n = now if now is not None else _t.time()
+    age_days = (n - mtime) / 86400
+    if age_days <= 7:   return 0.20
+    if age_days <= 30:  return 0.10
+    if age_days <= 90:  return 0.05
+    return 0.0
+
+
+def _entity_boost_paths(conn: sqlite3.Connection, query: str) -> dict[str, int]:
+    """Return {path: shared_entity_count} for entries that share entities with query."""
+    query_entities = extract_entities(query)
+    if not query_entities:
+        return {}
+    placeholders = ",".join("?" * len(query_entities))
+    rows = conn.execute(f"""
+        SELECT e.path, COUNT(*) AS shared
+        FROM entry_entities ee
+        JOIN entries e ON e.id = ee.entry_id
+        WHERE ee.entity IN ({placeholders})
+          AND (e.invalid_at IS NULL OR e.invalid_at IN ('~','null','none',''))
+        GROUP BY e.path
+    """, tuple(query_entities)).fetchall()
+    return {r["path"]: r["shared"] for r in rows}
+
+
+def rrf_fuse(
+    bm25: list[dict], vec: list[dict], k: int = 60,
+    conn: sqlite3.Connection | None = None, query: str = "",
+) -> list[dict]:
+    """Reciprocal Rank Fusion with optional entity + recency boost.
+
+    Base: research-validated RRF with k=60.
+    Entity boost: +0.10 per shared entity between query and entry (cap 0.30).
+    Recency boost: banded +0.05/+0.10/+0.20 by age — see _recency_boost.
+
+    Boosts only apply if `conn` is provided (entity lookup needs the DB).
+    """
     scores: dict[str, float] = {}
     by_path: dict[str, dict] = {}
     for rank, item in enumerate(bm25):
@@ -297,6 +434,47 @@ def rrf_fuse(bm25: list[dict], vec: list[dict], k: int = 60) -> list[dict]:
         p = item["path"]
         scores[p] = scores.get(p, 0.0) + 1.0 / (k + rank + 1)
         by_path.setdefault(p, item)
+
+    # Entity + recency boosts
+    if conn is not None:
+        entity_hits = _entity_boost_paths(conn, query) if query else {}
+
+        # Pull entity-only matches in as new candidates if BM25/vec missed them.
+        # This lets a query like "91.99.212.250" surface entries about that IP
+        # even if the literal token wasn't tokenized by FTS5.
+        missing = [p for p in entity_hits if p not in by_path]
+        if missing:
+            ph = ",".join("?" * len(missing))
+            new_rows = conn.execute(f"""
+                SELECT path, type, scope, topic, confidence, source,
+                       approved_by, valid_at,
+                       substr(content, 1, 200) AS snippet, 0.0 AS rank
+                FROM entries WHERE path IN ({ph})
+            """, tuple(missing)).fetchall()
+            for r in new_rows:
+                d = dict(r)
+                p = d["path"]
+                by_path[p] = d
+                # Start with a small base score so entity boost still dominates
+                # rank but the entry shows up at all.
+                scores[p] = scores.get(p, 0.0) + 1.0 / (k + 200)
+
+        # Pull mtimes for all candidate paths in one query
+        paths = list(by_path.keys())
+        if paths:
+            ph2 = ",".join("?" * len(paths))
+            mtime_rows = conn.execute(
+                f"SELECT path, mtime FROM entries WHERE path IN ({ph2})",
+                tuple(paths),
+            ).fetchall()
+            mtimes = {r["path"]: r["mtime"] for r in mtime_rows}
+            for p, item in by_path.items():
+                shared = entity_hits.get(p, 0)
+                if shared:
+                    scores[p] += min(0.30, shared * 0.10)
+                    item["_entity_match"] = shared
+                scores[p] += _recency_boost(mtimes.get(p))
+
     return [by_path[p] for p in sorted(scores, key=lambda x: -scores[x])]
 
 

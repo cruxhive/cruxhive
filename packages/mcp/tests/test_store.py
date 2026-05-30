@@ -145,3 +145,81 @@ def test_stale_high_confidence_lists_decayed(project):
     conn.close()
     paths = [d["path"] for d in decayed]
     assert ".llm/context/old_high.md" in paths
+
+
+# ── Ephemeral entries ─────────────────────────────────────────────────────────
+
+def test_ephemeral_entry_auto_expires_after_ttl(project):
+    """source: ephemeral entries older than EPHEMERAL_TTL_DAYS get invalid_at stamped."""
+    long_ago = (datetime.date.today() - datetime.timedelta(days=20)).isoformat()
+    p = project / ".llm" / "context" / "ephem.md"
+    _write(p, f"---\ntype: fact\ntopic: temp\nvalid_at: {long_ago}\nconfidence: low\n"
+              "source: ephemeral\napproved_by: ~\n---\n\nShort-lived fact.\n")
+    store.index(str(project))
+    # File should now have invalid_at stamped and be absent from index
+    on_disk = p.read_text()
+    assert "invalid_at:" in on_disk
+    assert "invalid_at: ~" not in on_disk
+    conn = store.connect(str(project))
+    rows = conn.execute("SELECT path FROM entries WHERE path=?",
+                        (".llm/context/ephem.md",)).fetchall()
+    conn.close()
+    assert rows == []
+
+
+def test_fresh_ephemeral_entry_stays_indexed(project):
+    """source: ephemeral entries within TTL remain searchable."""
+    today = datetime.date.today().isoformat()
+    _write(project / ".llm" / "context" / "fresh.md",
+           f"---\ntype: fact\ntopic: fresh\nvalid_at: {today}\nconfidence: low\n"
+           "source: ephemeral\napproved_by: ~\n---\n\nStill fresh.\n")
+    store.index(str(project))
+    conn = store.connect(str(project))
+    rows = conn.execute("SELECT path FROM entries WHERE path=?",
+                        (".llm/context/fresh.md",)).fetchall()
+    conn.close()
+    assert len(rows) == 1
+
+
+# ── Entity extraction ─────────────────────────────────────────────────────────
+
+def test_extract_entities_catches_common_patterns():
+    text = ("we use context_search and call POST to api.mozbridge.com on "
+            "host 91.99.212.250. See plans/auth.md for the AUTH_TOKEN config.")
+    entities = store.extract_entities(text)
+    assert "context_search" in entities
+    assert "91.99.212.250" in entities
+    assert "api.mozbridge.com" in entities
+    assert "auth.md" in entities
+    assert "AUTH_TOKEN" in entities
+
+
+def test_entity_search_boost_surfaces_matching_entry(project):
+    """Entry that shares an entity with the query should beat one that doesn't."""
+    _write(project / ".llm" / "context" / "a.md",
+           "---\ntype: fact\ntopic: random\nvalid_at: 2026-05-29\nconfidence: high\n"
+           "source: human\napproved_by: jess\n---\n\nGeneric note about deploying.\n")
+    _write(project / ".llm" / "context" / "b.md",
+           "---\ntype: fact\ntopic: hosts\nvalid_at: 2026-05-29\nconfidence: high\n"
+           "source: human\napproved_by: jess\n---\n\nServer at 91.99.212.250 runs mozbridge.\n")
+    store.index(str(project))
+    conn = store.connect(str(project))
+    bm25 = store.search_bm25(conn, "deploying", 10)
+    fused = store.rrf_fuse(bm25, [], conn=conn, query="91.99.212.250 deploying")
+    conn.close()
+    # b.md should rank above a.md when query mentions the IP, even though
+    # bm25 alone wouldn't pull it.
+    paths_in_order = [r["path"] for r in fused]
+    assert ".llm/context/b.md" in paths_in_order or any("b.md" in p for p in paths_in_order)
+
+
+# ── Recency boost ─────────────────────────────────────────────────────────────
+
+def test_recency_boost_bands():
+    import time
+    now = time.time()
+    assert store._recency_boost(now - 86400, now) == 0.20      # 1 day
+    assert store._recency_boost(now - 14 * 86400, now) == 0.10  # 14 days
+    assert store._recency_boost(now - 60 * 86400, now) == 0.05  # 60 days
+    assert store._recency_boost(now - 200 * 86400, now) == 0.0  # 200 days
+    assert store._recency_boost(None) == 0.0

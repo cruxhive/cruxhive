@@ -52,11 +52,29 @@ def ui() -> None:
 
 
 def index() -> None:
-    """cruxhive-index: index .llm/ into SQLite."""
+    """cruxhive-index: index .llm/ into SQLite.
+
+    Flags:
+      --rebuild   force full re-index (drops existing entries first). Use after
+                  upgrading cruxhive-mcp to a version with new schema features
+                  (entity tags, etc.) that need backfilling on existing files.
+    """
     from . import store as _store
     from . import embedder as _emb
 
+    args = sys.argv[1:]
+    rebuild = "--rebuild" in args
+
     root = os.getcwd()
+
+    if rebuild:
+        conn = _store.connect(root)
+        before = conn.execute("SELECT COUNT(*) FROM entries").fetchone()[0]
+        conn.execute("DELETE FROM entries")
+        conn.commit()
+        conn.close()
+        print(f"  \033[36m·\033[0m  --rebuild: dropped {before} entries; reindexing fresh")
+
     embedder = _emb if _emb.is_available() else None
     try:
         n = _store.index(root, embedder=embedder)
@@ -871,12 +889,15 @@ def search() -> None:
     result_n = 0
     try:
         conn = _store.connect(root)
-        hits = _store.search_bm25(conn, args[0], n)
+        bm25 = _store.search_bm25(conn, args[0], n * 2)
+        # Go through rrf_fuse for entity + recency boosts (vec empty if no model)
+        hits = _store.rrf_fuse(bm25, [], conn=conn, query=args[0])[:n]
         conn.close()
         result_n = len(hits)
         out = [
             {"path": h.get("path"), "topic": h.get("topic"),
-             "type": h.get("type"), "snippet": (h.get("snippet") or "")[:160]}
+             "type": h.get("type"), "snippet": (h.get("snippet") or "")[:160],
+             "entity_match": h.get("_entity_match", 0)}
             for h in hits
         ]
         print(json.dumps(out))

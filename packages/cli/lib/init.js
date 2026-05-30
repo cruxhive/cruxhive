@@ -192,6 +192,59 @@ Then call the \`context_propose\` MCP tool with those arguments. After it return
 
 Then call the \`context_write_plan\` MCP tool with \`plan_name\` and \`content\` (the full markdown).`,
   },
+  summarize: {
+    description: "Distill the current session into a single structured research entry (Background / Done / Decisions / Open questions / Next steps). One queued proposal, not N. Use at session end.",
+    body: `Produce a single structured summary of the current session and file it as ONE research-type CruxHive entry. Do NOT call \`context_propose\` more than once.
+
+## Step 1 — Draft the summary
+
+Re-read the conversation. Build a markdown body with exactly these sections (omit any that have no content):
+
+\`\`\`markdown
+## Background
+1-3 sentences describing what the user was working on and why.
+
+## What was done
+Bullet list. Concrete actions taken (commits, PRs, decisions, refactors). Skip thinking-out-loud.
+
+## Decisions
+Bullet list of choices made between alternatives. Each line: "Chose X over Y because Z".
+
+## Open questions
+Things the user mentioned but didn't resolve. Things you (the AI) flagged as unclear.
+
+## Next steps
+Bullet list. What the user said they'd do next, or what would logically come next.
+\`\`\`
+
+Keep the whole thing under 600 words. If the session was short or unfocused, say so honestly and stop.
+
+## Step 2 — Pick a topic
+
+1-3 words summarizing what the session was about (e.g. "auth-refactor", "deploy-debug", "observability-wave"). Lowercase, hyphenated.
+
+## Step 3 — Dedup check
+
+Call \`context_search\` with the topic. If a similar research entry was filed recently (look for matching type=research with the same topic), append-update the existing one (suggest editing it directly to the user). Otherwise proceed.
+
+## Step 4 — File it
+
+Call \`context_propose\` ONCE with:
+- type: \`research\`
+- topic: the topic from Step 2
+- content: the full markdown body from Step 1
+- scope: \`project\`
+
+## Step 5 — Confirm
+
+Print one line: \`Summary filed → .llm/pending/research_<topic>.md · approve via /review or cruxhive ui\`
+
+## Refusals
+
+If the conversation has fewer than 5 substantive exchanges, stop and say: "Not enough conversation to summarize." Do NOT file an empty entry.
+
+If the user explicitly says "don't save this" or "private" anywhere in the conversation, stop and say: "Skipping — user requested no persistence."`,
+  },
   extract: {
     description: "Distill the current conversation into proposed CruxHive knowledge entries. Dedupes, classifies, and queues for /review.",
     body: `You are extracting durable knowledge from the conversation so far. Make zero file changes directly — only call \`context_search\` (read) and \`context_propose\` (queue for human approval).
