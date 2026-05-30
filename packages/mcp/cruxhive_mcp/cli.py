@@ -736,20 +736,28 @@ def status() -> None:
 
 
 def search() -> None:
-    """cruxhive-search: BM25 search. Prints JSON. Args: <query> [n]"""
+    """cruxhive-search: BM25 search. Prints JSON. Args: <query> [n]
+
+    Logs the query to the events table so it shows up in `cruxhive stats`
+    and the workspace dashboard. Tagged with client_name='cli'.
+    """
     import json
+    import time as _time
     args = sys.argv[1:]
     if not args:
         print("Usage: cruxhive-search <query> [n]", file=sys.stderr)
         sys.exit(1)
     n = int(args[1]) if len(args) > 1 and args[1].isdigit() else 5
+    from . import events as _events
     from . import store as _store
     root = os.getcwd()
+    t0 = _time.perf_counter()
+    result_n = 0
     try:
         conn = _store.connect(root)
         hits = _store.search_bm25(conn, args[0], n)
         conn.close()
-        # Trim to fields the CLI cares about
+        result_n = len(hits)
         out = [
             {"path": h.get("path"), "topic": h.get("topic"),
              "type": h.get("type"), "snippet": (h.get("snippet") or "")[:160]}
@@ -758,6 +766,11 @@ def search() -> None:
         print(json.dumps(out))
     except Exception as e:
         print(json.dumps({"error": str(e)}))
+    finally:
+        ms = int((_time.perf_counter() - t0) * 1000)
+        # Tag CLI invocations distinctly so they're separable from MCP calls
+        _events.set_client("cli", "")
+        _events.log(root, "context_search", query=args[0], result_n=result_n, ms=ms)
 
 
 def reject() -> None:
