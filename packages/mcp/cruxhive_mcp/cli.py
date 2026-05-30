@@ -221,6 +221,252 @@ def digest() -> None:
     print("\n".join(out))
 
 
+def doctor() -> None:
+    """cruxhive-doctor: diagnose CruxHive setup in the current project.
+
+    Verifies all the things `cruxhive init` should have wired:
+    .llm/CONTEXT.md, .mcp.json, .gitignore entries, AI tool symlinks,
+    slash command files, .llm/memory/platform_refs.md, personal layer,
+    git post-commit hook, session hooks. Reports problems with fix
+    suggestions. Exit code: 0 if all green, 1 if any problem.
+    """
+    from pathlib import Path
+    import json
+
+    root = Path(os.getcwd())
+    proj = root.name
+
+    problems: list[str] = []
+    warnings: list[str] = []
+    oks: list[str] = []
+
+    def ok(msg: str) -> None:
+        oks.append(msg)
+
+    def warn(msg: str) -> None:
+        warnings.append(msg)
+
+    def fail(msg: str) -> None:
+        problems.append(msg)
+
+    # .llm/CONTEXT.md
+    ctx = root / ".llm" / "CONTEXT.md"
+    if not ctx.exists():
+        fail(f".llm/CONTEXT.md missing — run `cruxhive init`")
+    else:
+        ok(".llm/CONTEXT.md present")
+
+    # .mcp.json
+    mcp = root / ".mcp.json"
+    if not mcp.exists():
+        fail(".mcp.json missing — run `cruxhive init`")
+    else:
+        try:
+            cfg = json.loads(mcp.read_text())
+            if cfg.get("mcpServers", {}).get("cruxhive"):
+                ok(".mcp.json registers cruxhive-mcp")
+            else:
+                fail(".mcp.json present but missing cruxhive entry")
+        except Exception as e:
+            fail(f".mcp.json is malformed: {e}")
+
+    # AI tool wirings
+    tool_files = [
+        ("CLAUDE.md", "Claude Code"),
+        ("AGENT.md", "OpenCode"),
+        (".cursor/rules/cruxhive.mdc", "Cursor"),
+        (".windsurfRules", "Windsurf"),
+        ("GEMINI.md", "Gemini CLI"),
+    ]
+    missing_tools = []
+    for fname, tname in tool_files:
+        p = root / fname
+        if not (p.exists() or p.is_symlink()):
+            missing_tools.append(f"{tname} ({fname})")
+    if missing_tools:
+        warn(f"AI tool wirings missing for: {', '.join(missing_tools)}")
+    else:
+        ok("All 5 AI tool wirings present")
+
+    # .gitignore
+    gi = root / ".gitignore"
+    if gi.exists() and "cruxhive.db" in gi.read_text():
+        ok(".gitignore excludes cruxhive.db")
+    elif gi.exists():
+        warn(".gitignore exists but doesn't exclude .llm/cruxhive.db")
+    else:
+        warn(".gitignore missing — index/log will land in git unless added")
+
+    # Slash commands
+    expected = {"radar", "next-slice", "review", "propose", "write-plan", "extract"}
+    for dialect_dir, dialect_name in [
+        (".claude/commands", "Claude Code"),
+        (".opencode/commands", "OpenCode"),
+    ]:
+        d = root / dialect_dir
+        if not d.exists():
+            warn(f"{dialect_dir}/ missing — slash commands not wired for {dialect_name}")
+            continue
+        present = {f.stem for f in d.glob("*.md")}
+        missing = expected - present
+        if missing:
+            warn(f"{dialect_dir}/ missing commands: {', '.join(sorted(missing))}")
+        else:
+            ok(f"{dialect_dir}/ has all 6 slash commands")
+
+    # platform_refs.md
+    refs = root / ".llm" / "memory" / "platform_refs.md"
+    if refs.exists():
+        ok(".llm/memory/platform_refs.md present (org layer)")
+    else:
+        warn(".llm/memory/platform_refs.md missing — run `cruxhive sync` to populate org layer")
+
+    # Personal layer
+    from pathlib import Path as _P
+    personal = _P.home() / ".cruxhive" / "personal"
+    if personal.exists() and any(personal.glob("*.md")):
+        ok(f"Personal layer present (~/.cruxhive/personal/, {len(list(personal.glob('*.md')))} file(s))")
+    else:
+        warn("Personal layer empty — `cruxhive init` will seed it")
+
+    # Git post-commit hook
+    hook = root / ".git" / "hooks" / "post-commit"
+    if hook.exists():
+        body = hook.read_text()
+        if "cruxhive" in body.lower():
+            ok("Git post-commit hook installed (auto-index)")
+        else:
+            warn("Git post-commit exists but doesn't run cruxhive-index")
+    else:
+        warn("Git post-commit hook not installed — run `cruxhive init` to add auto-index")
+
+    # SQLite db sanity
+    db = root / ".llm" / "cruxhive.db"
+    if db.exists():
+        import sqlite3
+        try:
+            c = sqlite3.connect(str(db))
+            n = c.execute("SELECT COUNT(*) FROM entries").fetchone()[0]
+            e = c.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+            c.close()
+            ok(f"SQLite knowledge base healthy ({n} entries, {e} events)")
+        except Exception as ex:
+            fail(f"SQLite knowledge base corrupt: {ex}")
+    else:
+        warn(".llm/cruxhive.db missing — run `cruxhive index`")
+
+    # ── Output ──────────────────────────────────────────────────────────────
+    def c(s: str, code: str) -> str:
+        if not sys.stdout.isatty():
+            return s
+        return f"\033[{code}m{s}\033[0m"
+
+    print()
+    print(f"  {c('CruxHive doctor', '1')} — {proj}")
+    print()
+    for m in oks:
+        print(f"  {c('✓', '32')}  {m}")
+    for m in warnings:
+        print(f"  {c('!', '33')}  {m}")
+    for m in problems:
+        print(f"  {c('✗', '31')}  {m}")
+    print()
+    if problems:
+        print(f"  {c('Summary', '1')}: {len(problems)} problem(s), {len(warnings)} warning(s)")
+        print(f"  → Fix: \033[36mcruxhive init\033[0m  (idempotent, won't clobber existing files)\n")
+        sys.exit(1)
+    elif warnings:
+        print(f"  {c('Summary', '1')}: {len(warnings)} warning(s)")
+        print(f"  → Optional fixes: \033[36mcruxhive init\033[0m or \033[36mcruxhive sync\033[0m\n")
+        sys.exit(0)
+    else:
+        print(f"  {c('Summary', '1')}: all green ({len(oks)} checks passed)\n")
+        sys.exit(0)
+
+
+def _digest_age_days(root: str) -> int | None:
+    """Days since the last digest was written. None if never."""
+    from pathlib import Path
+    import datetime
+    digests = Path(root) / ".llm" / "digests"
+    if not digests.exists():
+        return None
+    files = sorted(digests.glob("*.md"))
+    if not files:
+        return None
+    latest = max(f.stat().st_mtime for f in files)
+    return int((datetime.datetime.now().timestamp() - latest) / 86400)
+
+
+def status() -> None:
+    """cruxhive-status: one-line health summary for hooks and nudges.
+
+    Flags:
+      --quiet   print nothing if everything is clean (for SessionStart hooks)
+      --json    structured output
+    """
+    import json
+    from pathlib import Path
+    from . import events as _events
+    from . import store as _store
+
+    args = sys.argv[1:]
+    quiet = "--quiet" in args or "-q" in args
+    as_json = "--json" in args
+
+    root = os.getcwd()
+    db = Path(root) / ".llm" / "cruxhive.db"
+    if not db.exists():
+        if as_json:
+            print(json.dumps({"setup": False}))
+        elif not quiet:
+            print("CruxHive: not initialized (run `cruxhive init`)")
+        return
+
+    conn = _store.connect(root)
+    pending = _store.list_pending(conn)
+    decayed = _store.stale_high_confidence(conn)
+    gaps = _events.top_gaps(conn, days=30, limit=50)
+    conn.close()
+
+    digest_age = _digest_age_days(root)
+    summary = {
+        "pending": len(pending),
+        "gaps_30d": len(gaps),
+        "decayed": len(decayed),
+        "digest_age_days": digest_age,
+    }
+
+    if as_json:
+        print(json.dumps(summary))
+        return
+
+    # Anything actionable?
+    actionable = (
+        summary["pending"] > 0
+        or summary["gaps_30d"] >= 3
+        or summary["decayed"] > 0
+        or (digest_age is not None and digest_age >= 7)
+    )
+
+    if quiet and not actionable:
+        return
+
+    parts: list[str] = []
+    if summary["pending"]:
+        parts.append(f"{summary['pending']} pending")
+    if summary["gaps_30d"] >= 3:
+        parts.append(f"{summary['gaps_30d']} gaps (30d)")
+    if summary["decayed"]:
+        parts.append(f"{summary['decayed']} decayed entries")
+    if digest_age is not None and digest_age >= 7:
+        parts.append(f"digest {digest_age}d old")
+
+    body = " · ".join(parts) if parts else "all clear"
+    suffix = "  →  run `cruxhive digest` for details" if actionable else ""
+    print(f"🐝 CruxHive: {body}{suffix}")
+
+
 def search() -> None:
     """cruxhive-search: BM25 search. Prints JSON. Args: <query> [n]"""
     import json

@@ -87,12 +87,42 @@ def register(mcp: FastMCP) -> None:
                     return "Knowledge base is empty. Run context_index first."
                 return f"No results for {query!r}. Try broader terms. ({total} entries indexed)"
 
+            # Enrich each result with effective_confidence + age_days for the user
+            conn3 = _store.connect(root)
+            mtime_map = {
+                row["path"]: row["mtime"]
+                for row in conn3.execute(
+                    f"SELECT path, mtime FROM entries WHERE path IN ({','.join(['?']*len(results))})",
+                    [r["path"] for r in results],
+                ).fetchall()
+            } if results else {}
+            conn3.close()
+            for r in results:
+                eff, age = _store.effective_confidence(
+                    r.get("confidence"), r.get("valid_at"), mtime_map.get(r["path"]),
+                )
+                r["_effective_confidence"] = eff
+                r["_age_days"] = age
+                r["_decayed"] = (
+                    eff != (r.get("confidence") or "").strip().lower()
+                    and bool(r.get("confidence"))
+                )
+
             lines = [f"## Results for `{query}`\n"]
             for i, r in enumerate(results, 1):
                 approved = r.get("approved_by") or "⏳ pending"
+                conf = (r.get("confidence") or "?").lower()
+                eff = r.get("_effective_confidence") or conf
+                age = r.get("_age_days") or 0
+                if r.get("_decayed"):
+                    conf_str = f"{conf}→{eff} · {age}d old · stale"
+                elif age and conf:
+                    conf_str = f"{conf} · {age}d old"
+                else:
+                    conf_str = conf
                 lines.append(
                     f"**{i}. {r['path']}**  "
-                    f"[{r.get('type','?')}] [{r.get('confidence','?')}] · {approved}"
+                    f"[{r.get('type','?')}] [{conf_str}] · {approved}"
                 )
                 if r.get("topic"):
                     lines.append(f"   _Topic: {r['topic']}_")

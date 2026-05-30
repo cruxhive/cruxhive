@@ -10,10 +10,12 @@ const { propose } = require("../lib/propose");
 const { review }  = require("../lib/review");
 const { stats }   = require("../lib/stats");
 const { digest }  = require("../lib/digest");
+const { status }  = require("../lib/status");
+const { doctor } = require("../lib/doctor");
 
 const [, , cmd, ...args] = process.argv;
 
-const commands = { init, sync, health, ui, index, propose, review, stats, digest };
+const commands = { init, sync, health, ui, index, propose, review, stats, digest, status, doctor };
 
 if (!cmd || cmd === "--help" || cmd === "-h") {
   console.log(`cruxhive v${require("../package.json").version}
@@ -29,6 +31,8 @@ Commands:
   health    Show knowledge base health summary
   stats     Usage observability — searches, hit rate, gaps, by AI tool
   digest    Weekly markdown digest — gaps, decayed entries, queue health
+  status    One-line health summary (use --quiet for hooks)
+  doctor    Diagnose CruxHive setup — symlinks, hooks, slash commands
   ui        Open the approval queue dashboard (localhost:3847)
 
 Options:
