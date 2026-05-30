@@ -74,7 +74,11 @@ def _infer_client_from_env() -> tuple[str, str]:
     """Best-effort client detection when MCP clientInfo is unavailable.
 
     Returns (name, version). Returns ('', '') if unknown.
+    Priority order: explicit CRUXHIVE_CLIENT hint > tool-specific env vars.
     """
+    # Explicit override — set in .envrc per project for tools without hooks
+    if os.environ.get("CRUXHIVE_CLIENT"):
+        return (os.environ["CRUXHIVE_CLIENT"], os.environ.get("CRUXHIVE_CLIENT_VERSION", ""))
     # Claude Code sets these
     if os.environ.get("CLAUDECODE") or os.environ.get("CLAUDE_CODE_SESSION"):
         return ("claude-code", os.environ.get("CLAUDE_CODE_VERSION", ""))
