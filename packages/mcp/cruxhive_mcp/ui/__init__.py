@@ -280,6 +280,8 @@ async function loadKpiStrip() {
   const decayPct = k.total_entries ? Math.round((k.decayed_count / k.total_entries) * 100) : 0;
 
   const chips = [];
+  chips.push(`<div class="kpi-chip ${(k.sessions || 0) > 0 ? 'good' : ''}">
+    <strong>${k.sessions || 0}</strong><span class="label">Sessions (7d)</span></div>`);
   if (hitRate !== null) {
     chips.push(`<div class="kpi-chip ${kpiClass(hitRate, {good:70, warn:50})}">
       <strong>${hitRate}%</strong><span class="label">Hit rate</span></div>`);
@@ -529,6 +531,7 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
             "hit_rate": s["hit_rate"],
             "searches": s["searches"],
             "hits": s["hits"],
+            "sessions": s.get("sessions", 0),
             "gaps_30d": len(gaps),
             "pending_count": pa["count"],
             "pending_oldest_days": pa["oldest_days"],
@@ -626,7 +629,7 @@ h2 .count{font-size:.7rem;color:#475569;font-weight:400;
   font-family:'SF Mono',monospace}
 
 /* ── KPI strip (aggregate) ─────────────────────────────────────── */
-.kpi-row{display:grid;grid-template-columns:repeat(6,1fr);gap:.5rem;margin-bottom:1.25rem}
+.kpi-row{display:grid;grid-template-columns:repeat(7,1fr);gap:.5rem;margin-bottom:1.25rem}
 .kpi{background:#161c2d;border:1px solid #1e2636;border-radius:.45rem;
   padding:.75rem .9rem;display:flex;flex-direction:column;line-height:1.2}
 .kpi-label{font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;
@@ -670,7 +673,7 @@ h2 .count{font-size:.7rem;color:#475569;font-weight:400;
   padding:.15rem .45rem;border-radius:.25rem;font-weight:600}
 .project-badge.active{background:#1e3a5f;color:#60a5fa}
 .project-badge.quiet{background:#1e2636;color:#64748b}
-.project-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-top:.2rem}
+.project-stats{display:grid;grid-template-columns:repeat(auto-fit, minmax(60px, 1fr));gap:.5rem;margin-top:.2rem}
 .project-stat{display:flex;flex-direction:column;gap:.15rem}
 .project-stat-label{font-size:.62rem;color:#64748b;text-transform:uppercase;
   letter-spacing:.05em}
@@ -778,7 +781,7 @@ function colorClass(value, thresholds, lowerIsBetter = false) {
 function isActive(s) {
   if (!s.kpis) return false;
   const k = s.kpis;
-  return (k.searches > 0) || (k.pending_count > 0) ||
+  return (k.sessions > 0) || (k.searches > 0) || (k.pending_count > 0) ||
          (k.proposals > 0) || (k.decayed_count > 0) || (k.gaps_30d > 0);
 }
 
@@ -795,16 +798,16 @@ async function load() {
   // ── Empty-state callout ─────────────────────────────────────────
   const slot = document.getElementById('callout-slot');
   const totallyIdle = (agg.searches || 0) === 0 && (agg.pending_count || 0) === 0
-                   && (agg.proposals || 0) === 0;
+                   && (agg.proposals || 0) === 0 && (agg.sessions || 0) === 0;
   if (totallyIdle && agg.total_entries > 0) {
     slot.innerHTML = `
       <div class="callout">
-        <h3>🐝 CruxHive is wired but nothing has used it yet</h3>
-        <p>You have <strong>${agg.total_entries}</strong> indexed entries across <strong>${agg.projects}</strong> projects, but no AI tool has searched the knowledge base in the last ${days} days. The "Hit rate", "Pending", and "Decayed" KPIs all read zero because the observability log is empty.</p>
-        <p><strong>To start measuring:</strong> open Claude Code or OpenCode in any project below and ask a question that should trigger a knowledge search. Then refresh this page.</p>
+        <h3>🐝 CruxHive is wired but no AI session has been recorded yet</h3>
+        <p>You have <strong>${agg.total_entries}</strong> indexed entries across <strong>${agg.projects}</strong> projects, but no SessionStart event has fired in the last ${days} days. This usually means your existing AI sessions started before the hook was wired — open a new Claude Code or OpenCode session in any project and the sessions counter will start moving.</p>
+        <p><strong>If sessions count up but searches stay at 0:</strong> the AI tool is loading <code>.llm/CONTEXT.md</code> as static context but never invoking the MCP <code>context_*</code> tools. Use slash commands (<code>/radar</code>, <code>/extract</code>, <code>/review</code>) or ask the AI explicitly to search the CruxHive knowledge base.</p>
         <div class="actions">
-          <span class="pill">cd ~/Projects_Local/Development/mozbridge && cruxhive ui</span>
-          <span class="pill">/extract  · /radar  · /next-slice</span>
+          <span class="pill">cd ~/Projects_Local/Development/mozbridge && claude</span>
+          <span class="pill">/radar  · /next-slice  · /extract</span>
         </div>
       </div>`;
   } else if (snaps.length === 0) {
@@ -822,15 +825,19 @@ async function load() {
   const decayPct = agg.total_entries ? (agg.decayed_count / agg.total_entries) : 0;
 
   const kpis = [
-    {label: 'Projects', value: agg.projects || 0, sub: errored.length ? `${errored.length} error(s)` : ''},
+    {label: 'Projects', value: agg.projects || 0,
+     sub: errored.length ? `${errored.length} error(s)` : `${agg.active_projects || 0} active`},
+    {label: 'Sessions', value: agg.sessions || 0,
+     sub: agg.sessions ? `last ${days}d` : 'no sessions yet',
+     cls: (agg.sessions || 0) > 0 ? 'good' : 'muted'},
     {label: 'Entries', value: agg.total_entries || 0},
-    {label: 'Constraints', value: agg.constraints || 0,
-     cls: (agg.constraints || 0) === 0 ? 'muted' : ''},
     {label: 'Pending', value: agg.pending_count || 0,
      cls: agg.pending_count > 5 ? 'warn' : (agg.pending_count > 0 ? '' : 'muted')},
     {label: 'Hit rate', value: hitRate === null ? '—' : fmtPct(hitRate),
      sub: agg.searches ? `${agg.searches} searches` : 'no searches yet',
      cls: hitRate === null ? 'muted' : colorClass(hitRate * 100, {good: 70, warn: 50})},
+    {label: 'Constraints', value: agg.constraints || 0,
+     cls: (agg.constraints || 0) === 0 ? 'muted' : ''},
     {label: 'Decayed', value: agg.decayed_count || 0,
      sub: agg.total_entries ? fmtPct(decayPct) + ' of total' : '',
      cls: decayPct > 0.15 ? 'warn' : (agg.decayed_count > 0 ? '' : 'muted')},
@@ -917,9 +924,10 @@ function renderCard(s, isActiveCard) {
     return '';
   };
 
-  // Three most relevant stats per card
+  // Four most relevant stats per card
   const stats = isActiveCard
     ? [
+        {label: 'sessions', value: k.sessions || 0, cls: (k.sessions || 0) > 0 ? '' : 'muted'},
         {label: 'searches', value: k.searches, cls: statClass(k.searches, false, {})},
         {label: 'hit rate', value: pct === null ? '—' : pct, cls: pct === null ? 'muted' : ''},
         {label: 'pending', value: k.pending_count + (k.pending_count ? ` · ${k.pending_oldest_days}d` : ''),

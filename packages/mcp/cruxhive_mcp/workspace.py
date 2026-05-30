@@ -153,6 +153,8 @@ def aggregate(snapshots: list[dict]) -> dict:
         "hits": 0,
         "total_calls": 0,
         "proposals": 0,
+        "sessions": 0,
+        "active_projects": 0,  # projects with any session in window
     }
     for s in snapshots:
         k = s.get("kpis") or {}
@@ -165,6 +167,9 @@ def aggregate(snapshots: list[dict]) -> dict:
         total["hits"] += ev.get("hits", 0)
         total["total_calls"] += k.get("total_calls", 0)
         total["proposals"] += k.get("proposals", 0)
+        total["sessions"] += k.get("sessions", 0)
+        if k.get("sessions", 0) > 0:
+            total["active_projects"] += 1
     total["hit_rate"] = (total["hits"] / total["searches"]) if total["searches"] else 0.0
     total["decay_ratio"] = (total["decayed_count"] / total["total_entries"]) if total["total_entries"] else 0.0
     return total

@@ -46,13 +46,26 @@ def register(mcp: FastMCP) -> None:
         type: str = "",
         project_root: str | None = None,
     ) -> str:
-        """Hybrid BM25 + vector search over the knowledge base.
+        """SEARCH the project's CruxHive knowledge base before answering questions or making changes.
 
-        query: natural language or keyword query
+        USE THIS WHEN:
+        - The user asks "how does X work in this project?" or "what's our pattern for Y?"
+        - You're about to make a non-trivial code change and want to check for existing
+          constraints, decisions, or patterns
+        - You're unsure about a project convention, host IP, secret path, or
+          architectural decision
+        - The user references something that sounds team- or project-specific
+
+        Returns hybrid BM25 + (optional) vector search results with snippets, marking
+        each result with effective confidence (high/medium/low) and age. Decayed entries
+        ([type] [high→medium · Nd old · stale]) need revalidation.
+
+        query: natural-language question or keywords
         n: max results (default 8)
         type: optional filter — fact|decision|plan|pattern|constraint|research|outcome
 
-        Run context_index first if no results appear.
+        If results are empty, the gap is logged for the user to fill via `cruxhive
+        propose` or /extract. Run context_index first if total entries shows 0.
         """
         import time as _time
         root = project_root or os.getcwd()
@@ -150,16 +163,28 @@ def register(mcp: FastMCP) -> None:
         scope: str = "project",
         project_root: str | None = None,
     ) -> str:
-        """Propose a new knowledge entry for human review.
+        """PROPOSE a new project knowledge entry for the human to approve.
 
-        type: fact|decision|plan|pattern|constraint|research|outcome
-        topic: one-to-three word tag (e.g. "auth", "database-schema", "cicd")
-        content: the knowledge body in markdown (include context, rationale, and why it matters)
-        scope: personal|project|org (default: project)
+        USE THIS WHEN:
+        - The user just established a decision, constraint, or pattern that should
+          outlive this conversation ("we use Logto for OIDC", "never log raw tokens",
+          "for new features, scaffold via stack.sh")
+        - You discovered a non-obvious fact about the project that took effort to find
+          and would save future sessions time
+        - The user confirms a rule, convention, or architectural choice
 
-        Writes to .llm/pending/ with source:ai-proposed.
-        Use context_review to list pending proposals.
-        Confidence is capped at medium until a human approves.
+        DO NOT use for transient session state, half-formed thoughts, or secrets.
+
+        Writes a markdown entry to .llm/pending/ with source:ai-proposed and
+        confidence:medium. The entry is searchable immediately but flagged pending
+        until a human approves via /review, `cruxhive review`, or `cruxhive ui`.
+        Confidence cannot be raised above medium without approval.
+
+        type: fact | decision | plan | pattern | constraint | research | outcome
+        topic: 1–3 word tag (e.g. "auth", "database-schema", "cicd-tokens")
+        content: full markdown body — include WHAT, WHY, and any context needed for
+                 someone to understand it 6 months from now
+        scope: personal | project | org (default: project)
         """
         root = project_root or os.getcwd()
         if type not in _VALID_TYPES:
@@ -257,10 +282,18 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @_events.trace("context_review")
     def context_review(project_root: str | None = None) -> str:
-        """List all pending AI-proposed knowledge entries awaiting human approval.
+        """LIST pending knowledge proposals waiting for human approval.
 
-        If cruxhive-mcp[full] is installed, each entry is also scanned via NLI
-        for conflicts with existing approved constraints, surfaced inline.
+        USE THIS WHEN:
+        - The user asks "what's in my approval queue?" or "anything to review?"
+        - You've just filed proposals via context_propose / /extract and want to
+          show the user what's queued
+        - You see a non-empty pending count in a status nudge
+
+        Returns each pending entry with type, topic, preview, and (if NLI is
+        installed) any contradictions with existing approved constraints surfaced
+        as warnings. For each entry, the response includes the exact
+        context_approve / context_reject calls the user can run.
         """
         root = project_root or os.getcwd()
         try:

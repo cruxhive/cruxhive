@@ -243,6 +243,10 @@ def summary(conn: sqlite3.Connection, days: int = 7) -> dict:
         "SELECT COUNT(*) FROM events WHERE tool='context_propose' AND ts >= ?",
         (cutoff,),
     ).fetchone()[0]
+    sessions = conn.execute(
+        "SELECT COUNT(*) FROM events WHERE tool='session_start' AND ts >= ?",
+        (cutoff,),
+    ).fetchone()[0]
     return {
         "days": days,
         "total_calls": total,
@@ -250,6 +254,7 @@ def summary(conn: sqlite3.Connection, days: int = 7) -> dict:
         "hits": hits,
         "hit_rate": (hits / searches) if searches else 0.0,
         "proposals": proposals,
+        "sessions": sessions,
     }
 
 

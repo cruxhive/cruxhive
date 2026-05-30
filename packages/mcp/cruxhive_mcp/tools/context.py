@@ -168,11 +168,17 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     def context_radar(days: int = 7, project_root: str | None = None) -> str:
-        """Scan recent git commits, classify by plan area, return a coverage report.
+        """SCAN recent commits and surface work that doesn't map to any documented plan.
 
-        Answers: "does everything I built have a plan behind it?"
-        Maps commits to .llm/plans/ files using conventional commit scopes,
-        areas.toml prefix matching, and directory keyword inference.
+        USE THIS WHEN:
+        - The user asks "what have I been working on?" or "anything I should plan?"
+        - Starting a new sprint or planning session
+        - You notice the user has shipped a lot of commits without referencing a plan
+        - The user runs /radar
+
+        Classifies each recent commit by area (via conventional-commit scope,
+        areas.toml prefix matching, or directory inference) and labels it
+        COVERED (plan exists), UNCOVERED (no plan), or UNCLASSIFIED.
 
         Args:
             days: How many days of git history to scan. Default 7.
@@ -259,13 +265,20 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     def context_next_slice(area: str = "", project_root: str | None = None) -> str:
-        """Find the next unblocked implementation slice from the active plan.
+        """FIND the next ready-to-start work slice from the project's plans.
+
+        USE THIS WHEN:
+        - The user asks "what's next?" or "what should I work on?"
+        - Starting a coding session and want to orient
+        - The user runs /next-slice
 
         Reads .llm/plans/active.md (or the named plan file) and extracts open
-        [ ] items. Returns a structured view so the AI can propose a concrete slice.
+        [ ] items, filtering out anything marked BLOCKED or DEFERRED. Returns
+        a ranked list so you can propose a scope for the user to confirm before
+        implementing.
 
         Args:
-            area: Plan area keyword (e.g. "cicd", "auth", "agentfile"). Empty = active.md.
+            area: Plan area keyword (e.g. "cicd", "auth"). Empty = active.md.
             project_root: Absolute path to the project root. Defaults to cwd.
         """
         root = _root(project_root)

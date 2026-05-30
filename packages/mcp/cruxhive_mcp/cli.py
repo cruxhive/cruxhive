@@ -188,6 +188,7 @@ def _collect_snapshot(root: str, days: int = 7) -> dict:
         "searches": summary["searches"],
         "total_calls": summary["total_calls"],
         "proposals": summary["proposals"],
+        "sessions": summary.get("sessions", 0),
     }
 
     return {
@@ -328,7 +329,8 @@ def digest() -> None:
     out.append(f"- **Constraints**: {kpis['constraints']}{delta('constraints')}\n")
 
     out.append(f"## Activity")
-    out.append(f"- **{summary['total_calls']}** tool calls{delta('total_calls')} · "
+    out.append(f"- **{kpis.get('sessions',0)}** AI sessions{delta('sessions')} · "
+               f"**{summary['total_calls']}** tool calls{delta('total_calls')} · "
                f"**{summary['searches']}** searches{delta('searches')}")
     out.append(f"- **{summary['proposals']}** new proposals{delta('proposals')}\n")
 
@@ -646,6 +648,7 @@ def workspace() -> None:
     print(f"    {agg['constraints']:>5}  constraints")
     print(f"    {agg['pending_count']:>5}  pending approval")
     print(f"    {agg['decayed_count']:>5}  decayed ({decay_pct} of total)")
+    print(f"    {agg.get('sessions', 0):>5}  AI sessions · {agg.get('active_projects', 0)} active project(s)")
     print(f"    {agg['total_calls']:>5}  tool calls · {agg['searches']} searches · {hit_pct} hit rate")
     print(f"    {agg['proposals']:>5}  proposals")
     print()
@@ -670,8 +673,11 @@ def status() -> None:
     """cruxhive-status: one-line health summary for hooks and nudges.
 
     Flags:
-      --quiet   print nothing if everything is clean (for SessionStart hooks)
-      --json    structured output
+      --quiet           print nothing if everything is clean (for SessionStart hooks)
+      --json            structured output
+      --session-start   ALSO log a session_start event before printing — used by
+                        SessionStart hooks to record that an AI session began,
+                        even if no MCP search ever happens in that session
     """
     import json
     from pathlib import Path
@@ -681,6 +687,7 @@ def status() -> None:
     args = sys.argv[1:]
     quiet = "--quiet" in args or "-q" in args
     as_json = "--json" in args
+    session_start = "--session-start" in args
 
     root = os.getcwd()
     db = Path(root) / ".llm" / "cruxhive.db"
@@ -690,6 +697,14 @@ def status() -> None:
         elif not quiet:
             print("CruxHive: not initialized (run `cruxhive init`)")
         return
+
+    # Record session start before any other work so we capture even broken sessions
+    if session_start:
+        try:
+            _events.set_client("", "")  # forces env-var detection of client_name
+            _events.log(root, "session_start", query="", result_n=None, ms=None)
+        except Exception:
+            pass
 
     conn = _store.connect(root)
     pending = _store.list_pending(conn)

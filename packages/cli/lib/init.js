@@ -342,7 +342,7 @@ const OPENCODE_PLUGIN_BODY = `// CruxHive: SessionStart nudge — prints pending
 export const CruxHiveStatus = async ({ $ }) => ({
   "session.created": async () => {
     try {
-      await $\`cruxhive-status --quiet\`.quiet();
+      await $\`cruxhive-status --quiet --session-start\`.quiet();
     } catch (_) {
       // status binary missing or returned non-zero — silent
     }
@@ -354,7 +354,14 @@ function wireOpenCodePlugin(cwd) {
   const pluginDir = join(cwd, ".opencode", "plugins");
   const plugin = join(pluginDir, "cruxhive-status.js");
   if (existsSync(plugin)) {
-    info(".opencode/plugins/cruxhive-status.js already exists — skipped");
+    // Upgrade if it's the older form without --session-start
+    const cur = readFileSync(plugin, "utf8");
+    if (cur.includes("cruxhive-status") && !cur.includes("--session-start")) {
+      writeFileSync(plugin, OPENCODE_PLUGIN_BODY);
+      ok(".opencode/plugins/cruxhive-status.js upgraded to --session-start");
+    } else {
+      info(".opencode/plugins/cruxhive-status.js already up-to-date — skipped");
+    }
     return;
   }
   mkdirSync(pluginDir, { recursive: true });
@@ -364,7 +371,7 @@ function wireOpenCodePlugin(cwd) {
 
 const CLAUDE_HOOK = {
   type: "command",
-  command: "cruxhive-status --quiet 2>/dev/null || true",
+  command: "cruxhive-status --quiet --session-start 2>/dev/null || true",
   timeout: 5,
 };
 
@@ -389,11 +396,18 @@ function wireClaudeSessionStart(cwd) {
     cfg.hooks.SessionStart.push(bucket);
   }
   bucket.hooks = bucket.hooks || [];
-  const exists = bucket.hooks.some(
+  const existing = bucket.hooks.find(
     (h) => typeof h.command === "string" && h.command.includes("cruxhive-status")
   );
-  if (exists) {
-    info(".claude/settings.json already invokes cruxhive-status");
+  if (existing) {
+    // Upgrade in place if it's the older form without --session-start
+    if (!existing.command.includes("--session-start")) {
+      existing.command = CLAUDE_HOOK.command;
+      writeFileSync(settingsPath, JSON.stringify(cfg, null, 2) + "\n");
+      ok(".claude/settings.json SessionStart hook upgraded to --session-start");
+    } else {
+      info(".claude/settings.json already invokes cruxhive-status --session-start");
+    }
     return;
   }
   bucket.hooks.push(CLAUDE_HOOK);
