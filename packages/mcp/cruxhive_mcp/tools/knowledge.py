@@ -200,12 +200,59 @@ def register(mcp: FastMCP) -> None:
             pass
 
         rel = str(fpath.relative_to(root))
-        return (
+
+        # Mem0-style conflict + similarity detection at propose time.
+        # Surfaces conflicts immediately so the proposer can decide to merge,
+        # replace, or withdraw before the human reviewer ever sees it.
+        warnings: list[str] = []
+        try:
+            conn = _store.connect(root)
+
+            # Tier 1 — BM25 similarity check (always runs, no deps).
+            # Find top 3 existing entries similar to the new proposal's topic+content.
+            sim_q = f"{topic} {content[:200]}"
+            similar = _store.search_bm25(conn, sim_q, 5)
+            similar = [s for s in similar if s.get("path") != rel][:3]
+            if similar:
+                lines = ["⚠ **Similar existing entries** (review for redundancy):"]
+                for s in similar:
+                    lines.append(
+                        f"  · {s['path']} [{s.get('type','?')}] "
+                        f"{'approved' if s.get('approved_by') else 'pending'}"
+                    )
+                warnings.append("\n".join(lines))
+
+            # Tier 2 — NLI-based contradiction check against approved constraints.
+            try:
+                from .. import nli as _nli
+                if _nli.is_available():
+                    constraints = _store.list_approved_constraints(conn)
+                    if constraints:
+                        conflicts = _nli.check_conflicts(content, constraints)
+                        if conflicts:
+                            lines = [f"⚠ **{len(conflicts)} contradiction(s) with approved constraints:**"]
+                            for c in conflicts[:3]:
+                                lines.append(
+                                    f"  · [{c.get('severity','?')}] {c.get('path','?')} "
+                                    f"(score: {c.get('score','?')})"
+                                )
+                            warnings.append("\n".join(lines))
+            except Exception:
+                pass
+
+            conn.close()
+        except Exception:
+            pass
+
+        msg = (
             f"Proposed: `{rel}`\n\n"
             f"Run `context_review` to see all pending proposals, "
             f"or `context_approve` to approve this one directly.\n"
             f"Open the approval dashboard: `cruxhive ui`"
         )
+        if warnings:
+            msg = "\n\n".join(warnings) + "\n\n" + msg
+        return msg
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @_events.trace("context_review")

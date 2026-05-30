@@ -26,11 +26,12 @@ function uvicornCmd() {
 
 async function ui(args) {
   const cwd = process.cwd();
-  const serve = args.includes("--serve");
+  const isWorkspace = args.includes("--workspace") || args.includes("-w");
 
-  console.log(`\n\x1b[1mcruxhive ui\x1b[0m — approval dashboard`);
+  const label = isWorkspace ? "workspace dashboard" : "approval dashboard";
+  console.log(`\n\x1b[1mcruxhive ui\x1b[0m — ${label}`);
 
-  if (!existsSync(`${cwd}/.llm/cruxhive.db`)) {
+  if (!isWorkspace && !existsSync(`${cwd}/.llm/cruxhive.db`)) {
     console.log(`\n  \x1b[33m!\x1b[0m  Knowledge base not indexed yet.`);
     console.log(`       Run: \x1b[36mcruxhive index\x1b[0m (or context_index MCP tool)\n`);
   }
@@ -43,7 +44,14 @@ async function ui(args) {
   }
 
   const url = `http://localhost:${PORT}`;
-  info(`Starting approval queue at ${url}`);
+  info(`Starting ${label} at ${url}`);
+
+  const env = { ...process.env };
+  if (isWorkspace) {
+    env.CRUXHIVE_WORKSPACE = "1";
+  } else {
+    env.CRUXHIVE_ROOT = cwd;
+  }
 
   const [bin, ...binArgs] = uvcmd;
   const proc = spawn(
@@ -55,11 +63,7 @@ async function ui(args) {
       "--port", String(PORT),
       "--factory",
     ],
-    {
-      cwd,
-      stdio: "inherit",
-      env: { ...process.env, CRUXHIVE_ROOT: cwd },
-    }
+    { cwd, stdio: "inherit", env }
   );
 
   proc.on("error", (e) => {

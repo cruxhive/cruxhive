@@ -411,11 +411,12 @@ function wireAutomationHooks(cwd) {
 function patchGitignore(cwd) {
   const ig = join(cwd, ".gitignore");
   const entries = [
-    "# CruxHive: local knowledge index + usage log (do not commit)",
+    "# CruxHive: local knowledge index, usage log, digest snapshots (do not commit)",
     ".llm/cruxhive.db",
     ".llm/cruxhive.db-shm",
     ".llm/cruxhive.db-wal",
     ".llm/pending/.cache",
+    ".llm/digests/",
   ];
   if (!existsSync(ig)) {
     writeFileSync(ig, entries.join("\n") + "\n");

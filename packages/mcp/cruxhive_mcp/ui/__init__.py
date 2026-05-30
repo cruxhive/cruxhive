@@ -115,6 +115,17 @@ _HTML = """<!doctype html>
       font-size:.8rem;color:#94a3b8}
     select{background:#0f1117;border:1px solid #2d3748;color:#e2e8f0;
       padding:.35rem .65rem;border-radius:.3rem;font-size:.78rem}
+    .kpi-strip{display:flex;gap:.4rem;padding:.5rem 2rem;background:#0d1018;
+      border-bottom:1px solid #1e2636;overflow-x:auto}
+    .kpi-chip{flex:0 0 auto;background:#161c2d;border:1px solid #1e2636;
+      border-radius:.4rem;padding:.4rem .75rem;font-size:.72rem;color:#94a3b8;
+      display:flex;flex-direction:column;line-height:1.2}
+    .kpi-chip strong{font-size:.95rem;font-weight:700;color:#e2e8f0}
+    .kpi-chip.good strong{color:#86efac}
+    .kpi-chip.warn strong{color:#fbbf24}
+    .kpi-chip.bad strong{color:#f87171}
+    .kpi-chip .label{font-size:.62rem;text-transform:uppercase;
+      letter-spacing:.05em;color:#64748b;margin-top:.15rem}
   </style>
 </head>
 <body>
@@ -122,6 +133,7 @@ _HTML = """<!doctype html>
   <h1>Crux<span>Hive</span></h1>
   <div class="stats" id="stats"></div>
 </header>
+<div class="kpi-strip" id="kpi-strip"></div>
 <nav class="tabs">
   <button class="active" data-tab="approvals">Approvals</button>
   <button data-tab="usage">Usage</button>
@@ -245,6 +257,48 @@ function renderHeader(stats) {
     <div class="stat"><strong>${stats.pending}</strong>pending</div>
     <div class="stat"><strong>${stats.constraints}</strong>constraints</div>
   `;
+}
+
+function kpiClass(value, thresholds, lowerIsBetter=false) {
+  // thresholds.good: value is good when >= (or <= if lowerIsBetter)
+  // thresholds.warn: value is warning when >= (or <= if lowerIsBetter)
+  if (lowerIsBetter) {
+    if (value <= thresholds.good) return 'good';
+    if (value <= thresholds.warn) return 'warn';
+    return 'bad';
+  }
+  if (value >= thresholds.good) return 'good';
+  if (value >= thresholds.warn) return 'warn';
+  return 'bad';
+}
+
+async function loadKpiStrip() {
+  const r = await fetch('/api/kpis');
+  if (!r.ok) return;
+  const k = await r.json();
+  const hitRate = k.searches ? Math.round((k.hits / k.searches) * 100) : null;
+  const decayPct = k.total_entries ? Math.round((k.decayed_count / k.total_entries) * 100) : 0;
+
+  const chips = [];
+  if (hitRate !== null) {
+    chips.push(`<div class="kpi-chip ${kpiClass(hitRate, {good:70, warn:50})}">
+      <strong>${hitRate}%</strong><span class="label">Hit rate</span></div>`);
+  } else {
+    chips.push(`<div class="kpi-chip">
+      <strong>—</strong><span class="label">Hit rate</span></div>`);
+  }
+  chips.push(`<div class="kpi-chip ${kpiClass(k.gaps_30d, {good:2, warn:5}, true)}">
+    <strong>${k.gaps_30d}</strong><span class="label">Gaps (30d)</span></div>`);
+  chips.push(`<div class="kpi-chip ${kpiClass(k.pending_oldest_days || 0, {good:3, warn:14}, true)}">
+    <strong>${k.pending_count}</strong><span class="label">Pending${k.pending_count ? ` · ${k.pending_oldest_days}d` : ''}</span></div>`);
+  chips.push(`<div class="kpi-chip ${kpiClass(decayPct, {good:5, warn:15}, true)}">
+    <strong>${k.decayed_count}</strong><span class="label">Decayed · ${decayPct}%</span></div>`);
+  chips.push(`<div class="kpi-chip">
+    <strong>${k.total_entries}</strong><span class="label">Entries</span></div>`);
+  chips.push(`<div class="kpi-chip">
+    <strong>${k.constraints}</strong><span class="label">Constraints</span></div>`);
+
+  document.getElementById('kpi-strip').innerHTML = chips.join('');
 }
 
 async function loadApprovals() {
@@ -401,6 +455,7 @@ async function reject(path) {
   }
 }
 
+loadKpiStrip();
 loadApprovals();
 </script>
 </body>
@@ -460,6 +515,28 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
             raise HTTPException(404, detail="entry not found")
         return {"ok": True}
 
+    @app.get("/api/kpis")
+    def api_kpis(days: int = 7):
+        """Compact KPI strip data — same shape used by the top banner."""
+        conn = _store.connect(root)
+        s = _events.summary(conn, days=days)
+        gaps = _events.top_gaps(conn, days=max(days, 30), limit=50)
+        pa = _events.pending_age(conn)
+        decayed = _store.stale_high_confidence(conn)
+        kb = _store.stats(conn)
+        conn.close()
+        return {
+            "hit_rate": s["hit_rate"],
+            "searches": s["searches"],
+            "hits": s["hits"],
+            "gaps_30d": len(gaps),
+            "pending_count": pa["count"],
+            "pending_oldest_days": pa["oldest_days"],
+            "decayed_count": len(decayed),
+            "total_entries": kb["total"],
+            "constraints": kb["constraints"],
+        }
+
     @app.get("/api/usage")
     def api_usage(days: int = 7):
         conn = _store.connect(root)
@@ -496,6 +573,149 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
 
 
 def app():
-    """Uvicorn factory entry point. Uses CRUXHIVE_ROOT env var for project root."""
+    """Uvicorn factory entry point. Uses CRUXHIVE_ROOT env var for project root.
+
+    If CRUXHIVE_WORKSPACE=1 is set, returns the workspace-mode UI instead.
+    """
+    if os.environ.get("CRUXHIVE_WORKSPACE", "0") not in {"0", "", "false", "no"}:
+        return make_workspace_app()
     root = os.environ.get("CRUXHIVE_ROOT") or os.getcwd()
     return make_app(root)
+
+
+# ── Workspace mode ────────────────────────────────────────────────────────────
+
+_WORKSPACE_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CruxHive · Workspace</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:#0f1117;color:#e2e8f0;min-height:100vh}
+header{padding:1.25rem 2rem;border-bottom:1px solid #1e2636;
+  display:flex;align-items:center;gap:1rem}
+header h1{font-size:1.1rem;font-weight:700;color:#f8fafc;letter-spacing:-.02em}
+header h1 span{color:#6366f1}
+header .mode{margin-left:auto;font-size:.7rem;color:#a78bfa;
+  background:#2e1065;border:1px solid #7c3aed44;padding:.25rem .65rem;border-radius:1rem}
+main{max-width:1100px;margin:2rem auto;padding:0 1.5rem}
+h2{font-size:.85rem;font-weight:600;text-transform:uppercase;
+  letter-spacing:.06em;color:#64748b;margin:1.5rem 0 1rem}
+.kpi-row{display:grid;grid-template-columns:repeat(6,1fr);gap:.6rem;margin-bottom:1.5rem}
+.kpi{background:#161c2d;border:1px solid #1e2636;border-radius:.5rem;padding:.85rem}
+.kpi-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;
+  color:#64748b;margin-bottom:.3rem}
+.kpi-value{font-size:1.3rem;font-weight:700;color:#e2e8f0}
+.kpi-sub{font-size:.7rem;color:#94a3b8;margin-top:.2rem}
+.project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.85rem}
+.project-card{background:#161c2d;border:1px solid #1e2636;border-radius:.5rem;padding:1rem;
+  transition:border-color .15s}
+.project-card:hover{border-color:#6366f1}
+.project-name{font-size:.95rem;font-weight:600;color:#e2e8f0;margin-bottom:.4rem}
+.project-row{display:flex;justify-content:space-between;font-size:.78rem;color:#94a3b8;
+  padding:.2rem 0}
+.project-row strong{color:#e2e8f0;font-variant-numeric:tabular-nums}
+.alert{color:#fbbf24}
+.bad{color:#f87171}
+.good{color:#86efac}
+.empty{padding:2rem;text-align:center;color:#64748b;
+  border:1px dashed #1e2636;border-radius:.5rem}
+</style>
+</head>
+<body>
+<header>
+  <h1>Crux<span>Hive</span></h1>
+  <span class="mode">Workspace</span>
+</header>
+<main>
+  <h2>Aggregate (last 7 days)</h2>
+  <div class="kpi-row" id="kpis"></div>
+
+  <h2>Per project</h2>
+  <div class="project-grid" id="projects"></div>
+</main>
+<script>
+function fmtPct(p) { return (p*100).toFixed(0) + '%'; }
+function colorize(v, thresholds) {
+  if (v >= thresholds.good) return 'good';
+  if (v >= thresholds.warn) return 'alert';
+  return 'bad';
+}
+
+async function load() {
+  const r = await fetch('/api/workspace?days=7');
+  const data = await r.json();
+  const agg = data.aggregate || {};
+  const snaps = data.projects || [];
+
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Projects</div>
+      <div class="kpi-value">${agg.projects||0}</div></div>
+    <div class="kpi"><div class="kpi-label">Entries</div>
+      <div class="kpi-value">${agg.total_entries||0}</div></div>
+    <div class="kpi"><div class="kpi-label">Constraints</div>
+      <div class="kpi-value">${agg.constraints||0}</div></div>
+    <div class="kpi"><div class="kpi-label">Pending</div>
+      <div class="kpi-value ${(agg.pending_count||0) > 5 ? 'alert' : ''}">${agg.pending_count||0}</div></div>
+    <div class="kpi"><div class="kpi-label">Hit rate</div>
+      <div class="kpi-value">${agg.searches ? fmtPct(agg.hit_rate) : '—'}</div>
+      <div class="kpi-sub">${agg.searches||0} searches</div></div>
+    <div class="kpi"><div class="kpi-label">Decayed</div>
+      <div class="kpi-value ${(agg.decay_ratio||0) > 0.15 ? 'alert' : ''}">${agg.decayed_count||0}</div>
+      <div class="kpi-sub">${fmtPct(agg.decay_ratio||0)} of total</div></div>
+  `;
+
+  const grid = document.getElementById('projects');
+  if (!snaps.length) {
+    grid.innerHTML = '<div class="empty">No projects discovered. Configure <code>~/.cruxhive/config.yaml</code>.</div>';
+    return;
+  }
+  grid.innerHTML = snaps.map(s => {
+    if (s.error) {
+      return `<div class="project-card">
+        <div class="project-name bad">${s.project}</div>
+        <div class="project-row">error: ${s.error.slice(0,60)}</div>
+      </div>`;
+    }
+    const k = s.kpis, ev = s.events || {};
+    const hits = ev.hits || 0;
+    const pct = k.searches ? fmtPct(hits/k.searches) : '—';
+    return `<div class="project-card">
+      <div class="project-name">${s.project}</div>
+      <div class="project-row"><span>entries</span><strong>${k.total_entries}</strong></div>
+      <div class="project-row"><span>pending</span><strong class="${k.pending_count > 3 ? 'alert' : ''}">${k.pending_count}${k.pending_count ? ' ('+k.pending_oldest_days+'d)' : ''}</strong></div>
+      <div class="project-row"><span>searches (7d)</span><strong>${k.searches}</strong></div>
+      <div class="project-row"><span>hit rate</span><strong>${pct}</strong></div>
+      <div class="project-row"><span>gaps (30d)</span><strong class="${k.gaps_30d > 5 ? 'alert' : ''}">${k.gaps_30d}</strong></div>
+      <div class="project-row"><span>decayed</span><strong class="${k.decay_ratio > 0.15 ? 'alert' : ''}">${k.decayed_count}</strong></div>
+    </div>`;
+  }).join('');
+}
+load();
+</script>
+</body>
+</html>"""
+
+
+def make_workspace_app() -> "FastAPI":  # type: ignore[name-defined]
+    if not _FASTAPI_AVAILABLE:
+        raise ImportError("fastapi not installed. Run: uv tool install 'cruxhive-mcp[ui]'")
+
+    from .. import workspace as _ws
+
+    app = FastAPI(title="CruxHive Workspace", docs_url=None, redoc_url=None)
+
+    @app.get("/", response_class=HTMLResponse)
+    def index():
+        return _WORKSPACE_HTML
+
+    @app.get("/api/workspace")
+    def api_workspace(days: int = 7):
+        snaps = _ws.collect_all(days=days)
+        agg = _ws.aggregate([s for s in snaps if not s.get("error")])
+        return {"aggregate": agg, "projects": snaps}
+
+    return app

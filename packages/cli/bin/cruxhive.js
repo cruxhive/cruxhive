@@ -12,10 +12,11 @@ const { stats }   = require("../lib/stats");
 const { digest }  = require("../lib/digest");
 const { status }  = require("../lib/status");
 const { doctor } = require("../lib/doctor");
+const { workspace } = require("../lib/workspace");
 
 const [, , cmd, ...args] = process.argv;
 
-const commands = { init, sync, health, ui, index, propose, review, stats, digest, status, doctor };
+const commands = { init, sync, health, ui, index, propose, review, stats, digest, status, doctor, workspace };
 
 if (!cmd || cmd === "--help" || cmd === "-h") {
   console.log(`cruxhive v${require("../package.json").version}
@@ -33,7 +34,9 @@ Commands:
   digest    Weekly markdown digest — gaps, decayed entries, queue health
   status    One-line health summary (use --quiet for hooks)
   doctor    Diagnose CruxHive setup — symlinks, hooks, slash commands
+  workspace Cross-project rollup — aggregate KPIs across all configured projects
   ui        Open the approval queue dashboard (localhost:3847)
+            Add --workspace to see cross-project rollup view
 
 Options:
   --help    Show this help message

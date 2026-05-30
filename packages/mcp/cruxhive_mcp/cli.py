@@ -5,6 +5,52 @@ import os
 import sys
 
 
+def ui() -> None:
+    """cruxhive-ui: launch the local approval/dashboard web UI.
+
+    Reads .llm/cruxhive.db from the current working directory.
+    Default port 3847; override with --port. Pass --workspace for the
+    cross-project workspace view (requires multiple .llm/ dirs nearby).
+
+    Install requires the [ui] extra:
+        uv tool install --reinstall --from <path> 'cruxhive-mcp[ui]'
+    """
+    try:
+        import uvicorn
+    except ImportError:
+        print(
+            "  \033[31m✗\033[0m  uvicorn not installed.\n"
+            "  Reinstall with the [ui] extra:\n"
+            "     uv tool install --reinstall --from "
+            "/path/to/cruxhive/packages/mcp 'cruxhive-mcp[ui]'",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    args = sys.argv[1:]
+    port = 3847
+    host = "127.0.0.1"
+    workspace = False
+    while args:
+        a = args.pop(0)
+        if a == "--port" and args:
+            port = int(args.pop(0))
+        elif a == "--host" and args:
+            host = args.pop(0)
+        elif a in ("--workspace", "-w"):
+            workspace = True
+        elif a in ("--help", "-h"):
+            print(ui.__doc__)
+            return
+
+    from .ui import make_app, make_workspace_app  # type: ignore[attr-defined]
+
+    app = make_workspace_app() if workspace else make_app()
+    print(f"  \033[32m✓\033[0m  CruxHive UI → http://{host}:{port}"
+          f"{'  (workspace mode)' if workspace else ''}")
+    uvicorn.run(app, host=host, port=port, log_level="warning")
+
+
 def index() -> None:
     """cruxhive-index: index .llm/ into SQLite."""
     from . import store as _store
@@ -111,15 +157,121 @@ def approve() -> None:
         sys.exit(1)
 
 
-def digest() -> None:
-    """cruxhive-digest: weekly markdown report of gaps, staleness, queue health."""
+def _collect_snapshot(root: str, days: int = 7) -> dict:
+    """Build a structured digest snapshot. Used by `digest` and `workspace`."""
     from datetime import date
     from pathlib import Path
     from . import events as _events
     from . import store as _store
 
+    proj = Path(root).name
+    conn = _store.connect(root)
+    summary = _events.summary(conn, days=days)
+    by_tool = _events.by_tool(conn, days=days)
+    gaps = _events.top_gaps(conn, days=max(days, 30), limit=10)
+    pend = _events.pending_age(conn)
+    decayed = _store.stale_high_confidence(conn)
+    kb = _store.stats(conn)
+    conn.close()
+
+    decay_ratio = (len(decayed) / kb["total"]) if kb["total"] else 0.0
+    kpis = {
+        "hit_rate": round(summary["hit_rate"], 4),
+        "gaps_30d": len(gaps),
+        "pending_count": pend["count"],
+        "pending_oldest_days": pend["oldest_days"],
+        "pending_avg_days": pend["avg_days"],
+        "decayed_count": len(decayed),
+        "decay_ratio": round(decay_ratio, 4),
+        "total_entries": kb["total"],
+        "constraints": kb["constraints"],
+        "searches": summary["searches"],
+        "total_calls": summary["total_calls"],
+        "proposals": summary["proposals"],
+    }
+
+    return {
+        "date": date.today().isoformat(),
+        "project": proj,
+        "root": str(root),
+        "window_days": days,
+        "kpis": kpis,
+        "kb": kb,
+        "events": summary,
+        "by_tool": by_tool,
+        "gaps": gaps[:10],
+        "decayed": [
+            {"path": d["path"], "age_days": d["age_days"],
+             "effective_confidence": d["effective_confidence"]}
+            for d in decayed[:25]
+        ],
+        "pending_age": pend,
+    }
+
+
+def _find_prior_snapshot(root: str, target_days_ago: int = 7) -> dict | None:
+    """Return the snapshot closest to N days before today, or None."""
+    import json
+    import datetime
+    from pathlib import Path
+
+    d = Path(root) / ".llm" / "digests"
+    if not d.exists():
+        return None
+    target = datetime.date.today() - datetime.timedelta(days=target_days_ago)
+    best: tuple[int, dict] | None = None
+    for f in d.glob("*.json"):
+        try:
+            data = json.loads(f.read_text())
+            ds = data.get("date")
+            if not ds:
+                continue
+            fdate = datetime.date.fromisoformat(ds)
+            if fdate >= datetime.date.today():
+                continue  # skip today's snapshot
+            diff = abs((fdate - target).days)
+            if best is None or diff < best[0]:
+                best = (diff, data)
+        except Exception:
+            continue
+    return best[1] if best else None
+
+
+def _delta(curr: float | int, prev: float | int, lower_is_better: bool = False) -> str:
+    """Format a delta arrow + sign. lower_is_better flips the color logic."""
+    if prev is None:
+        return ""
+    diff = curr - prev
+    if diff == 0:
+        return " →"
+    sign = "+" if diff > 0 else ""
+    arrow = "↑" if diff > 0 else "↓"
+    # Color heuristic (used only when stdout is a TTY)
+    good = (diff < 0) if lower_is_better else (diff > 0)
+    color = "32" if good else "31"
+    if not sys.stdout.isatty():
+        return f" {arrow}{sign}{diff}"
+    return f" \033[{color}m{arrow}{sign}{diff}\033[0m"
+
+
+def digest() -> None:
+    """cruxhive-digest: weekly markdown report of gaps, staleness, queue health.
+
+    Flags:
+      --days N        window in days (default 7)
+      --compare       diff against the snapshot closest to 7 days ago
+      --json          emit JSON snapshot instead of markdown
+      --no-save       don't persist to .llm/digests/
+    """
+    import json as _json
+    from datetime import date
+    from pathlib import Path
+
     days = 7
     args = sys.argv[1:]
+    compare = "--compare" in args
+    as_json = "--json" in args
+    no_save = "--no-save" in args
     for i, a in enumerate(args):
         if a in ("--days", "-d") and i + 1 < len(args) and args[i + 1].isdigit():
             days = int(args[i + 1])
@@ -130,26 +282,55 @@ def digest() -> None:
         print(f"# CruxHive digest — {proj}\n\n_No knowledge base yet. Run `cruxhive init` then `cruxhive index`._")
         sys.exit(1)
 
-    conn = _store.connect(root)
-    summary = _events.summary(conn, days=days)
-    by_tool = _events.by_tool(conn, days=days)
-    gaps = _events.top_gaps(conn, days=max(days, 30), limit=10)
-    pend = _events.pending_age(conn)
-    decayed = _store.stale_high_confidence(conn)
-    kb = _store.stats(conn)
-    conn.close()
+    snap = _collect_snapshot(root, days=days)
+    summary = snap["events"]
+    by_tool = snap["by_tool"]
+    gaps = snap["gaps"]
+    pend = snap["pending_age"]
+    decayed_list = snap["decayed"]
+    kb = snap["kb"]
+    kpis = snap["kpis"]
 
-    today = date.today().isoformat()
-    out = []
+    today = snap["date"]
+
+    # JSON mode short-circuits everything else
+    if as_json:
+        print(_json.dumps(snap, indent=2, default=str))
+        # Still persist
+        if not no_save:
+            _save_snapshot(root, today, snap, markdown=None)
+        return
+    prior = _find_prior_snapshot(root) if compare else None
+    prior_kpis = (prior or {}).get("kpis", {})
+
+    def delta(field, lower_is_better=False):
+        if not compare or field not in prior_kpis:
+            return ""
+        return _delta(kpis[field], prior_kpis[field], lower_is_better=lower_is_better)
+
+    out: list[str] = []
     out.append(f"# CruxHive digest — {proj}")
-    out.append(f"_Generated {today} · window: last {days} days_\n")
+    if compare and prior:
+        out.append(f"_Generated {today} · window: last {days} days · vs {prior.get('date','?')}_\n")
+    else:
+        out.append(f"_Generated {today} · window: last {days} days_\n")
 
-    # Headline
+    # KPI table — the headline view
     hit_pct = f"{summary['hit_rate']*100:.0f}%" if summary["searches"] else "—"
-    out.append(f"## Snapshot")
-    out.append(f"- **{kb['total']}** entries · **{kb['pending']}** pending · **{kb['constraints']}** constraints")
-    out.append(f"- **{summary['total_calls']}** tool calls · **{summary['searches']}** searches · **{hit_pct}** hit rate")
-    out.append(f"- **{summary['proposals']}** new proposals\n")
+    out.append(f"## Key indicators")
+    out.append(f"- **Hit rate**: {hit_pct}{delta('hit_rate')}")
+    out.append(f"- **Gaps (30d)**: {kpis['gaps_30d']}{delta('gaps_30d', lower_is_better=True)}")
+    out.append(f"- **Pending queue**: {kpis['pending_count']}{delta('pending_count', lower_is_better=True)}"
+               + (f" (oldest {kpis['pending_oldest_days']}d)" if kpis['pending_count'] else ""))
+    out.append(f"- **Decayed entries**: {kpis['decayed_count']}{delta('decayed_count', lower_is_better=True)}"
+               + f" ({kpis['decay_ratio']*100:.0f}% of total)")
+    out.append(f"- **Total entries**: {kpis['total_entries']}{delta('total_entries')}")
+    out.append(f"- **Constraints**: {kpis['constraints']}{delta('constraints')}\n")
+
+    out.append(f"## Activity")
+    out.append(f"- **{summary['total_calls']}** tool calls{delta('total_calls')} · "
+               f"**{summary['searches']}** searches{delta('searches')}")
+    out.append(f"- **{summary['proposals']}** new proposals{delta('proposals')}\n")
 
     # Gaps — most actionable
     if gaps:
@@ -164,13 +345,13 @@ def digest() -> None:
         out.append(f"## Top knowledge gaps\n_None — every recent search found something._\n")
 
     # Stale high-confidence entries
-    if decayed:
+    if decayed_list:
         out.append(f"## High-confidence entries that have decayed")
         out.append(f"_These were marked `confidence: high` but haven't been revalidated. Effective confidence has been auto-downgraded for search ranking._\n")
-        for d in decayed[:8]:
+        for d in decayed_list[:8]:
             out.append(f"- `{d['path']}` — {d['age_days']}d old, now **{d['effective_confidence']}** (was high)")
-        if len(decayed) > 8:
-            out.append(f"- … and {len(decayed) - 8} more")
+        if len(decayed_list) > 8:
+            out.append(f"- … and {len(decayed_list) - 8} more")
         out.append("")
         out.append("→ Re-read each, update `valid_at:` to today, or set `invalid_at:` to deprecate.\n")
 
@@ -209,8 +390,8 @@ def digest() -> None:
     suggestions = []
     if gaps:
         suggestions.append(f"Document the top {min(3, len(gaps))} gap{'s' if len(gaps) > 1 else ''}")
-    if decayed:
-        suggestions.append(f"Revalidate the {len(decayed)} decayed high-confidence entr{'ies' if len(decayed) != 1 else 'y'}")
+    if decayed_list:
+        suggestions.append(f"Revalidate the {len(decayed_list)} decayed high-confidence entr{'ies' if len(decayed_list) != 1 else 'y'}")
     if pend["count"] and pend["oldest_days"] > 7:
         suggestions.append("Drain the pending review queue")
     if not suggestions:
@@ -218,7 +399,22 @@ def digest() -> None:
     for s in suggestions:
         out.append(f"- {s}")
 
-    print("\n".join(out))
+    markdown = "\n".join(out)
+    print(markdown)
+
+    if not no_save:
+        _save_snapshot(root, today, snap, markdown=markdown)
+
+
+def _save_snapshot(root: str, date_iso: str, snap: dict, markdown: str | None) -> None:
+    """Persist a digest snapshot (.json always, .md if provided)."""
+    import json
+    from pathlib import Path
+    d = Path(root) / ".llm" / "digests"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{date_iso}.json").write_text(json.dumps(snap, indent=2, default=str))
+    if markdown is not None:
+        (d / f"{date_iso}.md").write_text(markdown)
 
 
 def doctor() -> None:
@@ -396,6 +592,78 @@ def _digest_age_days(root: str) -> int | None:
         return None
     latest = max(f.stat().st_mtime for f in files)
     return int((datetime.datetime.now().timestamp() - latest) / 86400)
+
+
+def workspace() -> None:
+    """cruxhive-workspace: aggregate KPIs across all configured projects.
+
+    Reads ~/.cruxhive/config.yaml (or scans ~/Projects_Local/Development/)
+    for projects with an initialized .llm/cruxhive.db, then prints a
+    workspace-wide rollup and per-project breakdown.
+
+    Flags:
+      --days N    window in days (default 7)
+      --json      structured output
+    """
+    import json
+    from . import workspace as _workspace
+
+    args = sys.argv[1:]
+    days = 7
+    as_json = "--json" in args
+    for i, a in enumerate(args):
+        if a in ("--days", "-d") and i + 1 < len(args) and args[i + 1].isdigit():
+            days = int(args[i + 1])
+
+    snaps = _workspace.collect_all(days=days)
+    agg = _workspace.aggregate([s for s in snaps if not s.get("error")])
+
+    if as_json:
+        print(json.dumps({"aggregate": agg, "projects": snaps}, indent=2, default=str))
+        return
+
+    if not snaps:
+        print()
+        print("  No CruxHive projects found.")
+        print("  Configure paths in ~/.cruxhive/config.yaml or scan a different directory.")
+        print()
+        return
+
+    def c(s: str, code: str) -> str:
+        if not sys.stdout.isatty():
+            return s
+        return f"\033[{code}m{s}\033[0m"
+
+    hit_pct = f"{agg['hit_rate']*100:.0f}%" if agg["searches"] else "—"
+    decay_pct = f"{agg['decay_ratio']*100:.0f}%" if agg["total_entries"] else "—"
+
+    print()
+    print(f"  {c('CruxHive workspace', '1')} · last {days} days · "
+          f"{agg['projects']} project(s)")
+    print()
+    print(f"  {c('Aggregate', '36')}")
+    print(f"    {agg['total_entries']:>5}  entries")
+    print(f"    {agg['constraints']:>5}  constraints")
+    print(f"    {agg['pending_count']:>5}  pending approval")
+    print(f"    {agg['decayed_count']:>5}  decayed ({decay_pct} of total)")
+    print(f"    {agg['total_calls']:>5}  tool calls · {agg['searches']} searches · {hit_pct} hit rate")
+    print(f"    {agg['proposals']:>5}  proposals")
+    print()
+    print(f"  {c('Per project', '36')}")
+    print(f"    {'project':<16} {'entries':>8} {'pending':>8} {'searches':>9} "
+          f"{'hits%':>7} {'decayed':>8} {'gaps':>6}")
+    for s in snaps:
+        if s.get("error"):
+            print(f"    {s['project'][:16]:<16} {c('error: ' + s['error'][:50], '31')}")
+            continue
+        k = s["kpis"]
+        searches = k["searches"]
+        hits = (s.get("events") or {}).get("hits", 0)
+        pct = f"{hits/searches*100:.0f}%" if searches else "—"
+        print(f"    {s['project'][:16]:<16} {k['total_entries']:>8} "
+              f"{k['pending_count']:>8} {searches:>9} {pct:>7} "
+              f"{k['decayed_count']:>8} {k['gaps_30d']:>6}")
+    print()
 
 
 def status() -> None:
