@@ -33,6 +33,7 @@ def connect(root: str) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     _try_load_vec(conn)
     _init_schema(conn)
+    _migrate(conn)
     # Also initialize the events log schema so stats queries work
     # against any store connection.
     try:
@@ -41,6 +42,57 @@ def connect(root: str) -> sqlite3.Connection:
     except Exception:
         pass
     return conn
+
+
+# ── Schema migrations ────────────────────────────────────────────────────────
+#
+# Append-only registry. Each migration runs exactly once per DB and is recorded
+# in the `schema_migrations` table. NEVER reorder or remove a migration that
+# has shipped — add a new one that undoes the old behavior instead. Idempotent
+# DDL (CREATE TABLE IF NOT EXISTS …) lives in `_init_schema`; column adds and
+# data-shape changes belong here.
+#
+# To add a migration:
+#   _MIGRATIONS.append((
+#       "002-add-rejected-by",
+#       "ALTER TABLE entries ADD COLUMN rejected_by TEXT",
+#   ))
+
+_MIGRATIONS: list[tuple[str, str]] = [
+    # No migrations yet — schema_migrations table is created on first connect,
+    # tracking begins from this revision (cruxhive-mcp >= 0.7).
+]
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Apply pending migrations idempotently. Failures are logged, not fatal —
+    a failed migration is retried on the next connect() so a transient SQLite
+    error (locked DB, etc.) doesn't permanently brick the store."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            id         TEXT PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    applied = {
+        row["id"]
+        for row in conn.execute("SELECT id FROM schema_migrations").fetchall()
+    }
+    for mid, sql in _MIGRATIONS:
+        if mid in applied:
+            continue
+        try:
+            conn.executescript(sql)
+            conn.execute(
+                "INSERT INTO schema_migrations(id, applied_at) VALUES (?, ?)",
+                (mid, datetime.datetime.now(datetime.timezone.utc).isoformat()),
+            )
+            conn.commit()
+        except sqlite3.Error as e:
+            import sys
+            print(f"cruxhive: migration {mid} failed: {e}", file=sys.stderr)
+            conn.rollback()
 
 
 def _try_load_vec(conn: sqlite3.Connection) -> None:

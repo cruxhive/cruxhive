@@ -596,104 +596,443 @@ _WORKSPACE_HTML = """<!doctype html>
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   background:#0f1117;color:#e2e8f0;min-height:100vh}
 header{padding:1.25rem 2rem;border-bottom:1px solid #1e2636;
-  display:flex;align-items:center;gap:1rem}
+  display:flex;align-items:center;gap:1rem;position:sticky;top:0;
+  background:#0f1117ee;backdrop-filter:blur(8px);z-index:10}
 header h1{font-size:1.1rem;font-weight:700;color:#f8fafc;letter-spacing:-.02em}
 header h1 span{color:#6366f1}
-header .mode{margin-left:auto;font-size:.7rem;color:#a78bfa;
+header .mode{font-size:.7rem;color:#a78bfa;
   background:#2e1065;border:1px solid #7c3aed44;padding:.25rem .65rem;border-radius:1rem}
-main{max-width:1100px;margin:2rem auto;padding:0 1.5rem}
-h2{font-size:.85rem;font-weight:600;text-transform:uppercase;
-  letter-spacing:.06em;color:#64748b;margin:1.5rem 0 1rem}
-.kpi-row{display:grid;grid-template-columns:repeat(6,1fr);gap:.6rem;margin-bottom:1.5rem}
-.kpi{background:#161c2d;border:1px solid #1e2636;border-radius:.5rem;padding:.85rem}
-.kpi-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;
-  color:#64748b;margin-bottom:.3rem}
-.kpi-value{font-size:1.3rem;font-weight:700;color:#e2e8f0}
-.kpi-sub{font-size:.7rem;color:#94a3b8;margin-top:.2rem}
-.project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.85rem}
-.project-card{background:#161c2d;border:1px solid #1e2636;border-radius:.5rem;padding:1rem;
-  transition:border-color .15s}
-.project-card:hover{border-color:#6366f1}
-.project-name{font-size:.95rem;font-weight:600;color:#e2e8f0;margin-bottom:.4rem}
-.project-row{display:flex;justify-content:space-between;font-size:.78rem;color:#94a3b8;
-  padding:.2rem 0}
-.project-row strong{color:#e2e8f0;font-variant-numeric:tabular-nums}
-.alert{color:#fbbf24}
-.bad{color:#f87171}
-.good{color:#86efac}
-.empty{padding:2rem;text-align:center;color:#64748b;
-  border:1px dashed #1e2636;border-radius:.5rem}
+header .filler{flex:1}
+header select{background:#0f1117;border:1px solid #2d3748;color:#e2e8f0;
+  padding:.4rem .65rem;border-radius:.3rem;font-size:.78rem;cursor:pointer}
+main{max-width:1180px;margin:1.5rem auto;padding:0 1.5rem}
+h2{font-size:.78rem;font-weight:600;text-transform:uppercase;
+  letter-spacing:.06em;color:#64748b;margin:1.5rem 0 .75rem;
+  display:flex;align-items:center;gap:.5rem}
+h2 .count{font-size:.7rem;color:#475569;font-weight:400;
+  background:#1e2636;padding:.1rem .5rem;border-radius:.75rem}
+
+/* ── Empty state callout ───────────────────────────────────────── */
+.callout{background:linear-gradient(135deg,#1e1b3a 0%,#13172a 100%);
+  border:1px solid #4338ca44;border-radius:.6rem;padding:1.4rem 1.6rem;
+  margin-bottom:1.5rem}
+.callout h3{font-size:1rem;color:#e2e8f0;margin-bottom:.5rem;font-weight:600}
+.callout p{font-size:.85rem;color:#94a3b8;line-height:1.55;margin-bottom:.6rem}
+.callout code{background:#0f1117;color:#a78bfa;padding:.1rem .4rem;
+  border-radius:.25rem;font-size:.78rem;font-family:'SF Mono',monospace}
+.callout .actions{margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap}
+.callout .pill{background:#1e2636;border:1px solid #2d3748;color:#cbd5e1;
+  padding:.35rem .7rem;border-radius:.3rem;font-size:.75rem;
+  font-family:'SF Mono',monospace}
+
+/* ── KPI strip (aggregate) ─────────────────────────────────────── */
+.kpi-row{display:grid;grid-template-columns:repeat(6,1fr);gap:.5rem;margin-bottom:1.25rem}
+.kpi{background:#161c2d;border:1px solid #1e2636;border-radius:.45rem;
+  padding:.75rem .9rem;display:flex;flex-direction:column;line-height:1.2}
+.kpi-label{font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;
+  color:#64748b;margin-bottom:.3rem;font-weight:600}
+.kpi-value{font-size:1.35rem;font-weight:700;color:#e2e8f0;
+  font-variant-numeric:tabular-nums}
+.kpi-value.muted{color:#475569}
+.kpi-value.good{color:#86efac}
+.kpi-value.warn{color:#fbbf24}
+.kpi-value.bad{color:#f87171}
+.kpi-sub{font-size:.66rem;color:#64748b;margin-top:.15rem}
+.kpi-delta{font-size:.65rem;font-weight:600;margin-left:.3rem}
+.kpi-delta.up{color:#86efac}
+.kpi-delta.down{color:#f87171}
+.kpi-delta.flat{color:#475569}
+
+/* ── Gaps panel ────────────────────────────────────────────────── */
+.gaps-panel{background:#161c2d;border:1px solid #1e2636;border-radius:.5rem;
+  padding:1rem 1.2rem;margin-bottom:1.25rem}
+.gap-row{display:flex;align-items:center;gap:.6rem;padding:.4rem 0;
+  border-bottom:1px solid #1e2636;font-size:.8rem}
+.gap-row:last-child{border-bottom:none}
+.gap-row .q{flex:1;font-family:'SF Mono',monospace;color:#fbbf24;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gap-row .meta{color:#64748b;font-size:.7rem}
+.gap-empty{color:#64748b;font-size:.8rem;text-align:center;padding:.5rem 0}
+
+/* ── Project cards ─────────────────────────────────────────────── */
+.project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));
+  gap:.7rem;margin-bottom:1rem}
+.project-card{background:#161c2d;border:1px solid #1e2636;border-radius:.5rem;
+  padding:.9rem 1rem;cursor:pointer;transition:all .15s;text-align:left;
+  font-family:inherit;color:inherit;display:flex;flex-direction:column;gap:.45rem;
+  width:100%}
+.project-card:hover{border-color:#6366f1;background:#1a2138;transform:translateY(-1px)}
+.project-card.active{border-left:3px solid #a78bfa;padding-left:.85rem}
+.project-card-header{display:flex;align-items:baseline;justify-content:space-between;
+  gap:.5rem}
+.project-name{font-size:1.05rem;font-weight:700;color:#f8fafc;letter-spacing:-.01em}
+.project-badge{font-size:.62rem;text-transform:uppercase;letter-spacing:.05em;
+  padding:.15rem .45rem;border-radius:.25rem;font-weight:600}
+.project-badge.active{background:#1e3a5f;color:#60a5fa}
+.project-badge.quiet{background:#1e2636;color:#64748b}
+.project-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-top:.2rem}
+.project-stat{display:flex;flex-direction:column;gap:.15rem}
+.project-stat-label{font-size:.62rem;color:#64748b;text-transform:uppercase;
+  letter-spacing:.05em}
+.project-stat-value{font-size:1rem;font-weight:600;color:#e2e8f0;
+  font-variant-numeric:tabular-nums}
+.project-stat-value.warn{color:#fbbf24}
+.project-stat-value.bad{color:#f87171}
+.project-stat-value.muted{color:#475569}
+
+/* ── Collapsed (quiet) cards ───────────────────────────────────── */
+.quiet-section{margin-top:.5rem}
+.quiet-toggle{background:none;border:1px dashed #1e2636;color:#94a3b8;
+  font-size:.78rem;padding:.5rem 1rem;border-radius:.4rem;cursor:pointer;
+  width:100%;text-align:left;font-family:inherit;
+  display:flex;align-items:center;justify-content:space-between}
+.quiet-toggle:hover{border-color:#475569;color:#e2e8f0}
+.quiet-toggle .chevron{transition:transform .15s}
+.quiet-toggle.open .chevron{transform:rotate(90deg)}
+.quiet-list{display:none;margin-top:.6rem}
+.quiet-list.open{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));
+  gap:.7rem}
+
+/* ── Drilldown drawer ──────────────────────────────────────────── */
+.drawer-overlay{position:fixed;inset:0;background:#000c;z-index:50;
+  display:none;align-items:center;justify-content:center;padding:2rem}
+.drawer-overlay.open{display:flex}
+.drawer{background:#0f1117;border:1px solid #2d3748;border-radius:.6rem;
+  width:100%;max-width:680px;max-height:88vh;overflow:hidden;
+  display:flex;flex-direction:column}
+.drawer-header{padding:1.1rem 1.4rem;border-bottom:1px solid #1e2636;
+  display:flex;align-items:center;gap:1rem}
+.drawer-header h3{font-size:1.05rem;font-weight:700;color:#f8fafc}
+.drawer-header .close{margin-left:auto;background:none;border:none;color:#94a3b8;
+  font-size:1.3rem;cursor:pointer;line-height:1;padding:.25rem .5rem;border-radius:.3rem}
+.drawer-header .close:hover{background:#1e2636;color:#f8fafc}
+.drawer-body{padding:1rem 1.4rem;overflow-y:auto;font-size:.85rem;color:#cbd5e1}
+.drawer-section{margin-bottom:1.25rem}
+.drawer-section h4{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;
+  color:#64748b;font-weight:600;margin-bottom:.5rem}
+.drawer-path{font-family:'SF Mono',monospace;font-size:.72rem;color:#475569;
+  word-break:break-all;margin-top:.25rem}
+.drawer-cmd{background:#161c2d;border:1px solid #1e2636;border-radius:.35rem;
+  padding:.55rem .8rem;font-family:'SF Mono',monospace;font-size:.78rem;
+  color:#a78bfa;margin-top:.4rem}
+.drawer-list li{padding:.3rem 0;border-bottom:1px solid #1e2636;
+  display:flex;justify-content:space-between;gap:.5rem;font-size:.78rem}
+.drawer-list li:last-child{border-bottom:none}
+.drawer-list code{font-family:'SF Mono',monospace;color:#94a3b8;font-size:.72rem}
+.kbd{font-family:'SF Mono',monospace;font-size:.7rem;color:#cbd5e1;
+  background:#1e2636;border:1px solid #2d3748;padding:.05rem .3rem;border-radius:.2rem}
 </style>
 </head>
 <body>
 <header>
   <h1>Crux<span>Hive</span></h1>
   <span class="mode">Workspace</span>
+  <span class="filler"></span>
+  <label style="font-size:.7rem;color:#64748b">window:</label>
+  <select id="window" onchange="load()">
+    <option value="7" selected>Last 7 days</option>
+    <option value="30">Last 30 days</option>
+    <option value="90">Last 90 days</option>
+  </select>
 </header>
 <main>
-  <h2>Aggregate (last 7 days)</h2>
+  <div id="callout-slot"></div>
+  <h2>Aggregate <span class="count" id="agg-count"></span></h2>
   <div class="kpi-row" id="kpis"></div>
 
-  <h2>Per project</h2>
-  <div class="project-grid" id="projects"></div>
+  <h2>Top knowledge gaps <span class="count">cross-project</span></h2>
+  <div class="gaps-panel" id="gaps-panel"></div>
+
+  <h2>Active projects <span class="count" id="active-count"></span></h2>
+  <div class="project-grid" id="active-projects"></div>
+
+  <div class="quiet-section" id="quiet-section"></div>
 </main>
+
+<div class="drawer-overlay" id="drawer-overlay" onclick="if(event.target===this)closeDrawer()">
+  <div class="drawer">
+    <div class="drawer-header">
+      <h3 id="drawer-title">Project</h3>
+      <button class="close" onclick="closeDrawer()">×</button>
+    </div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </div>
+</div>
+
 <script>
-function fmtPct(p) { return (p*100).toFixed(0) + '%'; }
-function colorize(v, thresholds) {
-  if (v >= thresholds.good) return 'good';
-  if (v >= thresholds.warn) return 'alert';
+const fmtPct = (p) => p === null ? '—' : (p * 100).toFixed(0) + '%';
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function colorClass(value, thresholds, lowerIsBetter = false) {
+  if (lowerIsBetter) {
+    if (value <= thresholds.good) return 'good';
+    if (value <= thresholds.warn) return 'warn';
+    return 'bad';
+  }
+  if (value >= thresholds.good) return 'good';
+  if (value >= thresholds.warn) return 'warn';
   return 'bad';
 }
 
+function isActive(s) {
+  if (!s.kpis) return false;
+  const k = s.kpis;
+  return (k.searches > 0) || (k.pending_count > 0) ||
+         (k.proposals > 0) || (k.decayed_count > 0) || (k.gaps_30d > 0);
+}
+
 async function load() {
-  const r = await fetch('/api/workspace?days=7');
+  const days = document.getElementById('window').value;
+  const r = await fetch(`/api/workspace?days=${days}`);
   const data = await r.json();
   const agg = data.aggregate || {};
-  const snaps = data.projects || [];
+  const snaps = (data.projects || []).filter(s => !s.error);
+  const errored = (data.projects || []).filter(s => s.error);
 
-  document.getElementById('kpis').innerHTML = `
-    <div class="kpi"><div class="kpi-label">Projects</div>
-      <div class="kpi-value">${agg.projects||0}</div></div>
-    <div class="kpi"><div class="kpi-label">Entries</div>
-      <div class="kpi-value">${agg.total_entries||0}</div></div>
-    <div class="kpi"><div class="kpi-label">Constraints</div>
-      <div class="kpi-value">${agg.constraints||0}</div></div>
-    <div class="kpi"><div class="kpi-label">Pending</div>
-      <div class="kpi-value ${(agg.pending_count||0) > 5 ? 'alert' : ''}">${agg.pending_count||0}</div></div>
-    <div class="kpi"><div class="kpi-label">Hit rate</div>
-      <div class="kpi-value">${agg.searches ? fmtPct(agg.hit_rate) : '—'}</div>
-      <div class="kpi-sub">${agg.searches||0} searches</div></div>
-    <div class="kpi"><div class="kpi-label">Decayed</div>
-      <div class="kpi-value ${(agg.decay_ratio||0) > 0.15 ? 'alert' : ''}">${agg.decayed_count||0}</div>
-      <div class="kpi-sub">${fmtPct(agg.decay_ratio||0)} of total</div></div>
-  `;
+  document.getElementById('agg-count').textContent = `last ${days} days · ${snaps.length} project(s)`;
 
-  const grid = document.getElementById('projects');
-  if (!snaps.length) {
-    grid.innerHTML = '<div class="empty">No projects discovered. Configure <code>~/.cruxhive/config.yaml</code>.</div>';
-    return;
-  }
-  grid.innerHTML = snaps.map(s => {
-    if (s.error) {
-      return `<div class="project-card">
-        <div class="project-name bad">${s.project}</div>
-        <div class="project-row">error: ${s.error.slice(0,60)}</div>
+  // ── Empty-state callout ─────────────────────────────────────────
+  const slot = document.getElementById('callout-slot');
+  const totallyIdle = (agg.searches || 0) === 0 && (agg.pending_count || 0) === 0
+                   && (agg.proposals || 0) === 0;
+  if (totallyIdle && agg.total_entries > 0) {
+    slot.innerHTML = `
+      <div class="callout">
+        <h3>🐝 CruxHive is wired but nothing has used it yet</h3>
+        <p>You have <strong>${agg.total_entries}</strong> indexed entries across <strong>${agg.projects}</strong> projects, but no AI tool has searched the knowledge base in the last ${days} days. The "Hit rate", "Pending", and "Decayed" KPIs all read zero because the observability log is empty.</p>
+        <p><strong>To start measuring:</strong> open Claude Code or OpenCode in any project below and ask a question that should trigger a knowledge search. Then refresh this page.</p>
+        <div class="actions">
+          <span class="pill">cd ~/Projects_Local/Development/mozbridge && cruxhive ui</span>
+          <span class="pill">/extract  · /radar  · /next-slice</span>
+        </div>
       </div>`;
-    }
-    const k = s.kpis, ev = s.events || {};
-    const hits = ev.hits || 0;
-    const pct = k.searches ? fmtPct(hits/k.searches) : '—';
-    return `<div class="project-card">
-      <div class="project-name">${s.project}</div>
-      <div class="project-row"><span>entries</span><strong>${k.total_entries}</strong></div>
-      <div class="project-row"><span>pending</span><strong class="${k.pending_count > 3 ? 'alert' : ''}">${k.pending_count}${k.pending_count ? ' ('+k.pending_oldest_days+'d)' : ''}</strong></div>
-      <div class="project-row"><span>searches (7d)</span><strong>${k.searches}</strong></div>
-      <div class="project-row"><span>hit rate</span><strong>${pct}</strong></div>
-      <div class="project-row"><span>gaps (30d)</span><strong class="${k.gaps_30d > 5 ? 'alert' : ''}">${k.gaps_30d}</strong></div>
-      <div class="project-row"><span>decayed</span><strong class="${k.decay_ratio > 0.15 ? 'alert' : ''}">${k.decayed_count}</strong></div>
-    </div>`;
-  }).join('');
+  } else if (snaps.length === 0) {
+    slot.innerHTML = `
+      <div class="callout">
+        <h3>No projects discovered</h3>
+        <p>Configure <code>~/.cruxhive/config.yaml</code> with a <code>workspace.projects</code> list, or place your projects as siblings inside <code>~/Projects_Local/Development/</code>.</p>
+      </div>`;
+  } else {
+    slot.innerHTML = '';
+  }
+
+  // ── KPI strip ───────────────────────────────────────────────────
+  const hitRate = agg.searches ? agg.hit_rate : null;
+  const decayPct = agg.total_entries ? (agg.decayed_count / agg.total_entries) : 0;
+
+  const kpis = [
+    {label: 'Projects', value: agg.projects || 0, sub: errored.length ? `${errored.length} error(s)` : ''},
+    {label: 'Entries', value: agg.total_entries || 0},
+    {label: 'Constraints', value: agg.constraints || 0,
+     cls: (agg.constraints || 0) === 0 ? 'muted' : ''},
+    {label: 'Pending', value: agg.pending_count || 0,
+     cls: agg.pending_count > 5 ? 'warn' : (agg.pending_count > 0 ? '' : 'muted')},
+    {label: 'Hit rate', value: hitRate === null ? '—' : fmtPct(hitRate),
+     sub: agg.searches ? `${agg.searches} searches` : 'no searches yet',
+     cls: hitRate === null ? 'muted' : colorClass(hitRate * 100, {good: 70, warn: 50})},
+    {label: 'Decayed', value: agg.decayed_count || 0,
+     sub: agg.total_entries ? fmtPct(decayPct) + ' of total' : '',
+     cls: decayPct > 0.15 ? 'warn' : (agg.decayed_count > 0 ? '' : 'muted')},
+  ];
+
+  document.getElementById('kpis').innerHTML = kpis.map(k => `
+    <div class="kpi">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value ${k.cls || ''}">${k.value}</div>
+      ${k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
+    </div>
+  `).join('');
+
+  // ── Cross-project Top Gaps ───────────────────────────────────────
+  const allGaps = {};
+  snaps.forEach(s => (s.gaps || []).forEach(g => {
+    const key = g.query;
+    if (!allGaps[key]) allGaps[key] = {query: g.query, times: 0, projects: new Set()};
+    allGaps[key].times += g.times || 0;
+    allGaps[key].projects.add(s.project);
+  }));
+  const topGaps = Object.values(allGaps)
+    .sort((a, b) => b.times - a.times)
+    .slice(0, 6);
+
+  const gp = document.getElementById('gaps-panel');
+  if (topGaps.length === 0) {
+    gp.innerHTML = '<div class="gap-empty">No zero-result queries — every recent search found something.</div>';
+  } else {
+    gp.innerHTML = topGaps.map(g => `
+      <div class="gap-row">
+        <span class="q">${esc(g.query)}</span>
+        <span class="meta">${g.times}× · ${[...g.projects].join(', ')}</span>
+      </div>
+    `).join('');
+  }
+
+  // ── Sort + split projects ────────────────────────────────────────
+  const active = snaps.filter(isActive).sort((a, b) =>
+    (b.kpis.searches + b.kpis.pending_count) - (a.kpis.searches + a.kpis.pending_count));
+  const quiet = snaps.filter(s => !isActive(s)).sort((a, b) =>
+    (b.kpis.total_entries || 0) - (a.kpis.total_entries || 0));
+
+  document.getElementById('active-count').textContent =
+    active.length ? `${active.length}` : 'none in this window';
+
+  document.getElementById('active-projects').innerHTML = active.length
+    ? active.map(s => renderCard(s, true)).join('')
+    : '<div class="gap-empty">No projects with recent activity. The cards below have entries but no MCP calls yet.</div>';
+
+  const qs = document.getElementById('quiet-section');
+  if (quiet.length === 0) {
+    qs.innerHTML = '';
+  } else {
+    qs.innerHTML = `
+      <button class="quiet-toggle" onclick="toggleQuiet(event)">
+        <span><span class="chevron">▸</span>&nbsp; ${quiet.length} quiet project(s) — no MCP activity in last ${days} days</span>
+        <span style="font-size:.7rem;color:#64748b">click to expand</span>
+      </button>
+      <div class="quiet-list" id="quiet-list">
+        ${quiet.map(s => renderCard(s, false)).join('')}
+      </div>`;
+  }
+
+  // Stash for drilldown
+  window.__snaps = Object.fromEntries(snaps.map(s => [s.project, s]));
 }
+
+function toggleQuiet(e) {
+  const btn = e.currentTarget;
+  btn.classList.toggle('open');
+  document.getElementById('quiet-list').classList.toggle('open');
+}
+
+function renderCard(s, isActiveCard) {
+  const k = s.kpis;
+  const ev = s.events || {};
+  const hits = ev.hits || 0;
+  const pct = k.searches ? fmtPct(hits / k.searches) : null;
+
+  const statClass = (val, lowerIsBetter, thresholds) => {
+    if (val === 0 || val === null) return 'muted';
+    if (lowerIsBetter) return val > thresholds.bad ? 'bad' : (val > thresholds.warn ? 'warn' : '');
+    return '';
+  };
+
+  // Three most relevant stats per card
+  const stats = isActiveCard
+    ? [
+        {label: 'searches', value: k.searches, cls: statClass(k.searches, false, {})},
+        {label: 'hit rate', value: pct === null ? '—' : pct, cls: pct === null ? 'muted' : ''},
+        {label: 'pending', value: k.pending_count + (k.pending_count ? ` · ${k.pending_oldest_days}d` : ''),
+         cls: statClass(k.pending_count, true, {warn: 3, bad: 10})},
+      ]
+    : [
+        {label: 'entries', value: k.total_entries, cls: k.total_entries === 0 ? 'muted' : ''},
+        {label: 'gaps', value: k.gaps_30d, cls: statClass(k.gaps_30d, true, {warn: 3, bad: 10})},
+        {label: 'decayed', value: k.decayed_count, cls: statClass(k.decayed_count, true, {warn: 5, bad: 20})},
+      ];
+
+  return `
+    <button class="project-card ${isActiveCard ? 'active' : ''}" onclick="openDrawer('${esc(s.project)}')">
+      <div class="project-card-header">
+        <span class="project-name">${esc(s.project)}</span>
+        <span class="project-badge ${isActiveCard ? 'active' : 'quiet'}">${isActiveCard ? 'active' : `${k.total_entries} entries`}</span>
+      </div>
+      <div class="project-stats">
+        ${stats.map(st => `
+          <div class="project-stat">
+            <span class="project-stat-label">${st.label}</span>
+            <span class="project-stat-value ${st.cls}">${st.value}</span>
+          </div>`).join('')}
+      </div>
+    </button>`;
+}
+
+function openDrawer(name) {
+  const s = window.__snaps[name];
+  if (!s) return;
+  const k = s.kpis;
+
+  document.getElementById('drawer-title').textContent = name;
+
+  const sections = [];
+
+  // Path + open command
+  sections.push(`
+    <div class="drawer-section">
+      <h4>Path</h4>
+      <div class="drawer-path">${esc(s.root || '?')}</div>
+      <div class="drawer-cmd">cd ${esc(s.root || '?')} &amp;&amp; cruxhive ui</div>
+      <div class="kpi-sub" style="margin-top:.35rem">Opens this project's dedicated UI with Approvals · Usage · By AI Tool · Gaps tabs.</div>
+    </div>`);
+
+  // KPI summary
+  const hits = (s.events || {}).hits || 0;
+  const pct = k.searches ? fmtPct(hits / k.searches) : 'no searches yet';
+  sections.push(`
+    <div class="drawer-section">
+      <h4>Last ${s.window_days || 7} days</h4>
+      <ul class="drawer-list">
+        <li><span>Tool calls</span><strong>${k.total_calls}</strong></li>
+        <li><span>Searches</span><strong>${k.searches}</strong></li>
+        <li><span>Hit rate</span><strong>${pct}</strong></li>
+        <li><span>Proposals</span><strong>${k.proposals}</strong></li>
+        <li><span>Total entries</span><strong>${k.total_entries}</strong></li>
+        <li><span>Constraints</span><strong>${k.constraints}</strong></li>
+      </ul>
+    </div>`);
+
+  // Top gaps for this project
+  if ((s.gaps || []).length) {
+    sections.push(`
+      <div class="drawer-section">
+        <h4>Top gaps for this project</h4>
+        <ul class="drawer-list">
+          ${s.gaps.slice(0, 5).map(g => `
+            <li><span>${esc(g.query)}</span><strong>${g.times}×</strong></li>
+          `).join('')}
+        </ul>
+      </div>`);
+  }
+
+  // Decayed
+  if ((s.decayed || []).length) {
+    sections.push(`
+      <div class="drawer-section">
+        <h4>Decayed entries (${s.decayed.length})</h4>
+        <ul class="drawer-list">
+          ${s.decayed.slice(0, 5).map(d => `
+            <li><code>${esc(d.path)}</code><strong>${d.age_days}d · ${esc(d.effective_confidence)}</strong></li>
+          `).join('')}
+        </ul>
+      </div>`);
+  }
+
+  // Pending
+  if (k.pending_count > 0) {
+    sections.push(`
+      <div class="drawer-section">
+        <h4>Pending approval</h4>
+        <ul class="drawer-list">
+          <li><span>Count</span><strong>${k.pending_count}</strong></li>
+          <li><span>Oldest</span><strong>${k.pending_oldest_days}d</strong></li>
+          <li><span>Average age</span><strong>${k.pending_avg_days}d</strong></li>
+        </ul>
+        <div class="drawer-cmd" style="margin-top:.5rem">cruxhive review</div>
+      </div>`);
+  }
+
+  document.getElementById('drawer-body').innerHTML = sections.join('');
+  document.getElementById('drawer-overlay').classList.add('open');
+}
+
+function closeDrawer() {
+  document.getElementById('drawer-overlay').classList.remove('open');
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeDrawer();
+});
+
 load();
 </script>
 </body>

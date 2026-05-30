@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cruxhive-mcp"
-version = "0.7.1"
+version = "0.7.2"
 description = "CruxHive MCP server — team AI knowledge governance layer"
 readme = "README.md"
 license = { text = "MIT" }
