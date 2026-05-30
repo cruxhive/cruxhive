@@ -125,10 +125,17 @@ def propose() -> None:
         fpath = pending_dir / f"{entry_type}_{slug}_{i}.md"
         i += 1
 
+    from . import workspace as _ws
+    solo_enabled, solo_approver = _ws.is_solo()
+    if solo_enabled:
+        source_val, approved_by = "human", solo_approver
+    else:
+        source_val, approved_by = "ai-proposed", "~"
+
     fpath.write_text(
         f"---\ntype: {entry_type}\nscope: {scope}\ntopic: {topic}\n"
         f"valid_at: {date}\ninvalid_at: ~\nconfidence: medium\n"
-        f"source: ai-proposed\napproved_by: ~\n---\n\n{content}\n",
+        f"source: {source_val}\napproved_by: {approved_by}\n---\n\n{content}\n",
         encoding="utf-8",
     )
     try:
@@ -137,8 +144,11 @@ def propose() -> None:
         pass
 
     rel = str(fpath.relative_to(root))
-    print(f"  \033[32m✓\033[0m  Proposed: {rel}")
-    print(f"       Run \033[36mcruxhive review\033[0m to approve or reject.")
+    if solo_enabled:
+        print(f"  \033[32m✓\033[0m  Written: {rel}  (solo mode — auto-approved as {solo_approver})")
+    else:
+        print(f"  \033[32m✓\033[0m  Proposed: {rel}")
+        print(f"       Run \033[36mcruxhive review\033[0m to approve or reject.")
 
 
 def review() -> None:
@@ -625,6 +635,83 @@ def _digest_age_days(root: str) -> int | None:
     return int((datetime.datetime.now().timestamp() - latest) / 86400)
 
 
+def solo() -> None:
+    """cruxhive-solo: enable/disable auto-approve-own-proposals mode.
+
+    Use this when you're the only approver — turns CruxHive's pending queue
+    into a no-op so `context_propose` writes entries as already-approved.
+
+    Flags:
+      --enable          turn solo mode on (default)
+      --disable         turn solo mode off — back to normal approval queue
+      --name NAME       approver name to stamp on entries (default: `git config user.name`)
+      --status          just print current state, change nothing
+    """
+    from . import workspace as _ws
+
+    args = sys.argv[1:]
+    disable = "--disable" in args
+    status_only = "--status" in args
+    name = ""
+    for i, a in enumerate(args):
+        if a == "--name" and i + 1 < len(args):
+            name = args[i + 1]
+
+    cfg = _ws.load_config()
+
+    def c(s, code):
+        return s if not sys.stdout.isatty() else f"\033[{code}m{s}\033[0m"
+
+    if status_only:
+        enabled, approver = _ws.is_solo(name)
+        print()
+        if enabled:
+            print(f"  {c('Solo mode: ON', '32')}")
+            print(f"  Approver: {c(approver, '36')}")
+            print(f"  Source: {'CRUXHIVE_SOLO env' if os.environ.get('CRUXHIVE_SOLO') else 'config.yaml'}")
+        else:
+            print(f"  {c('Solo mode: OFF', '90')}")
+            print(f"  Proposals will land in .llm/pending/ and need explicit approval.")
+        print()
+        return
+
+    if disable:
+        if "solo" in cfg:
+            cfg["solo"]["enabled"] = False
+            _ws.save_config(cfg)
+        print(f"  {c('✓', '32')}  Solo mode disabled. Proposals will require explicit approval.")
+        return
+
+    # Enable
+    if not name:
+        try:
+            import subprocess
+            r = subprocess.run(
+                ["git", "config", "user.name"], capture_output=True, text=True, timeout=2
+            )
+            name = r.stdout.strip()
+        except Exception:
+            pass
+    if not name:
+        print(f"  {c('!', '33')}  No --name given and `git config user.name` is unset.")
+        print(f"  Pass --name 'Your Name' or set git user.name first.")
+        sys.exit(1)
+
+    cfg.setdefault("solo", {})
+    cfg["solo"]["enabled"] = True
+    cfg["solo"]["approver"] = name
+    _ws.save_config(cfg)
+    print()
+    print(f"  {c('✓', '32')}  Solo mode enabled.")
+    print(f"  Approver: {c(name, '36')}")
+    print(f"  Config: {c(str(_ws.config_path()), '90')}")
+    print()
+    print(f"  From now on, `context_propose` writes entries directly as approved.")
+    print(f"  Override per-project: \033[36mCRUXHIVE_SOLO=0 cruxhive propose\033[0m")
+    print(f"  Disable: \033[36mcruxhive solo --disable\033[0m")
+    print()
+
+
 def workspace() -> None:
     """cruxhive-workspace: aggregate KPIs across all configured projects.
 
@@ -870,17 +957,32 @@ def status() -> None:
 
 
 def search() -> None:
-    """cruxhive-search: BM25 search. Prints JSON. Args: <query> [n]
+    """cruxhive-search: BM25 + entity + recency search.
 
-    Logs the query to the events table so it shows up in `cruxhive stats`
-    and the workspace dashboard. Tagged with client_name='cli'.
+    Usage:
+      cruxhive-search <query> [n]               # search current project
+      cruxhive-search --workspace <query> [n]   # search ALL configured projects
+
+    Prints JSON. Logs to the events table (client_name='cli').
     """
     import json
     import time as _time
-    args = sys.argv[1:]
-    if not args:
-        print("Usage: cruxhive-search <query> [n]", file=sys.stderr)
+    raw = sys.argv[1:]
+    if not raw:
+        print("Usage: cruxhive-search [--workspace] <query> [n]", file=sys.stderr)
         sys.exit(1)
+
+    workspace_mode = False
+    args = []
+    for a in raw:
+        if a in ("--workspace", "-w"):
+            workspace_mode = True
+        else:
+            args.append(a)
+    if not args:
+        print("Usage: cruxhive-search [--workspace] <query> [n]", file=sys.stderr)
+        sys.exit(1)
+
     n = int(args[1]) if len(args) > 1 and args[1].isdigit() else 5
     from . import events as _events
     from . import store as _store
@@ -888,26 +990,39 @@ def search() -> None:
     t0 = _time.perf_counter()
     result_n = 0
     try:
-        conn = _store.connect(root)
-        bm25 = _store.search_bm25(conn, args[0], n * 2)
-        # Go through rrf_fuse for entity + recency boosts (vec empty if no model)
-        hits = _store.rrf_fuse(bm25, [], conn=conn, query=args[0])[:n]
-        conn.close()
-        result_n = len(hits)
-        out = [
-            {"path": h.get("path"), "topic": h.get("topic"),
-             "type": h.get("type"), "snippet": (h.get("snippet") or "")[:160],
-             "entity_match": h.get("_entity_match", 0)}
-            for h in hits
-        ]
+        if workspace_mode:
+            from . import workspace as _ws
+            hits = _ws.search_all(args[0], n=n)
+            out = [
+                {"project": h.get("project"), "path": h.get("path"),
+                 "topic": h.get("topic"), "type": h.get("type"),
+                 "snippet": (h.get("snippet") or "")[:160],
+                 "entity_match": h.get("_entity_match", 0)}
+                for h in hits
+            ]
+        else:
+            conn = _store.connect(root)
+            bm25 = _store.search_bm25(conn, args[0], n * 2)
+            hits = _store.rrf_fuse(bm25, [], conn=conn, query=args[0])[:n]
+            conn.close()
+            out = [
+                {"path": h.get("path"), "topic": h.get("topic"),
+                 "type": h.get("type"), "snippet": (h.get("snippet") or "")[:160],
+                 "entity_match": h.get("_entity_match", 0)}
+                for h in hits
+            ]
+        result_n = len(out)
         print(json.dumps(out))
     except Exception as e:
         print(json.dumps({"error": str(e)}))
     finally:
         ms = int((_time.perf_counter() - t0) * 1000)
-        # Tag CLI invocations distinctly so they're separable from MCP calls
         _events.set_client("cli", "")
-        _events.log(root, "context_search", query=args[0], result_n=result_n, ms=ms)
+        _events.log(
+            root,
+            "context_workspace_search" if workspace_mode else "context_search",
+            query=args[0], result_n=result_n, ms=ms,
+        )
 
 
 def reject() -> None:

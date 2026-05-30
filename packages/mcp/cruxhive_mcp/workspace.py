@@ -79,15 +79,89 @@ def _expand(p: str) -> Path:
     return Path(os.path.expanduser(p)).resolve()
 
 
+def config_path() -> Path:
+    return Path.home() / ".cruxhive" / "config.yaml"
+
+
 def load_config() -> dict:
-    """Return the workspace config dict, or {} if no config file present."""
-    cfg_path = Path.home() / ".cruxhive" / "config.yaml"
-    if not cfg_path.exists():
+    """Return the cruxhive config dict, or {} if no config file present."""
+    p = config_path()
+    if not p.exists():
         return {}
     try:
-        return _parse_simple_yaml(cfg_path.read_text())
+        return _parse_simple_yaml(p.read_text())
     except Exception:
         return {}
+
+
+def _format_value(v) -> str:
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if v is None:
+        return "~"
+    s = str(v)
+    # Quote if contains chars that need it
+    if any(c in s for c in ":#"):
+        return f'"{s}"'
+    return s
+
+
+def save_config(cfg: dict) -> None:
+    """Write a config dict back to ~/.cruxhive/config.yaml in simple YAML."""
+    p = config_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    for section, body in cfg.items():
+        if isinstance(body, dict):
+            lines.append(f"{section}:")
+            for k, v in body.items():
+                if isinstance(v, list):
+                    lines.append(f"  {k}:")
+                    for item in v:
+                        lines.append(f"    - {item}")
+                else:
+                    lines.append(f"  {k}: {_format_value(v)}")
+            lines.append("")
+        else:
+            lines.append(f"{section}: {_format_value(body)}")
+    p.write_text("\n".join(lines).rstrip() + "\n")
+
+
+def is_solo(approver_hint: str = "") -> tuple[bool, str]:
+    """Return (enabled, approver) for solo mode.
+
+    Solo mode is enabled when:
+      - CRUXHIVE_SOLO=1 env var is set, OR
+      - ~/.cruxhive/config.yaml has solo.enabled: true
+
+    Approver resolves from:
+      1. approver_hint argument (if given)
+      2. CRUXHIVE_APPROVER env var
+      3. config.yaml solo.approver
+      4. `git config user.name` (best-effort)
+      5. literal "self"
+    """
+    env_solo = os.environ.get("CRUXHIVE_SOLO", "").lower() in {"1", "true", "yes"}
+    cfg = load_config().get("solo") or {}
+    enabled = env_solo or bool(cfg.get("enabled"))
+    if not enabled:
+        return (False, "")
+    approver = (
+        approver_hint
+        or os.environ.get("CRUXHIVE_APPROVER", "")
+        or cfg.get("approver", "")
+    )
+    if not approver:
+        try:
+            import subprocess
+            r = subprocess.run(
+                ["git", "config", "user.name"],
+                capture_output=True, text=True, timeout=2,
+            )
+            approver = r.stdout.strip() or "self"
+        except Exception:
+            approver = "self"
+    return (True, approver)
 
 
 def list_projects(scan: Path | None = None) -> list[Path]:
@@ -120,6 +194,38 @@ def list_projects(scan: Path | None = None) -> list[Path]:
         if child.is_dir() and (child / ".llm" / "cruxhive.db").exists():
             out.append(child)
     return out
+
+
+def search_all(query: str, n: int = 10) -> list[dict]:
+    """Search every configured project's index, merge results.
+
+    Returns a flat list of result dicts, each with a `project` key naming
+    the project the entry lives in. Sorted by descending fused score
+    (BM25 + entity + recency).
+    """
+    from . import store as _store
+
+    all_results: list[dict] = []
+    for root in list_projects():
+        db = root / ".llm" / "cruxhive.db"
+        if not db.exists():
+            continue
+        try:
+            conn = _store.connect(str(root))
+            bm25 = _store.search_bm25(conn, query, n * 2)
+            fused = _store.rrf_fuse(bm25, [], conn=conn, query=query)
+            for r in fused[:n]:
+                r["project"] = root.name
+                all_results.append(r)
+            conn.close()
+        except Exception:
+            continue
+
+    # Re-sort merged set. Entries with entity matches go first.
+    all_results.sort(
+        key=lambda r: (-(r.get("_entity_match") or 0), r.get("rank") or 0)
+    )
+    return all_results[:n]
 
 
 def collect_all(days: int = 7) -> list[dict]:

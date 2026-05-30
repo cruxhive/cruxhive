@@ -157,6 +157,48 @@ def register(mcp: FastMCP) -> None:
                 meta={"type_filter": type, "paths": result_paths[:5]} if result_paths else None,
             )
 
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
+    @_events.trace("context_workspace_search", query_kw="query")
+    def context_workspace_search(
+        query: str,
+        n: int = 8,
+    ) -> str:
+        """SEARCH ALL configured CruxHive projects, not just this one.
+
+        USE THIS WHEN:
+        - The user asks "how did I solve X in another project?"
+        - You're certain the answer is in a sibling project but not this one
+        - The user wants cross-project context
+
+        Iterates every project listed in ~/.cruxhive/config.yaml (or auto-
+        discovered under ~/Projects_Local/Development/) and merges results.
+        Each result is tagged with the project it lives in.
+
+        query: natural language or keywords
+        n: max results across all projects (default 8)
+        """
+        try:
+            from .. import workspace as _ws
+            hits = _ws.search_all(query, n=n)
+            if not hits:
+                return f"No results across configured projects for {query!r}."
+            lines = [f"## Workspace results for `{query}` (across {len({h.get('project') for h in hits})} projects)\n"]
+            for i, r in enumerate(hits, 1):
+                proj = r.get("project", "?")
+                lines.append(
+                    f"**{i}. {proj}** · `{r['path']}`  "
+                    f"[{r.get('type','?')}] [{r.get('confidence','?')}]"
+                )
+                if r.get("topic"):
+                    lines.append(f"   _Topic: {r['topic']}_")
+                snippet = (r.get("snippet") or "").strip()
+                if snippet:
+                    lines.append(f"   …{snippet}…")
+                lines.append("")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Error: {e}"
+
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
     @_events.trace("context_propose", query_kw="topic")
     def context_propose(
@@ -208,7 +250,25 @@ def register(mcp: FastMCP) -> None:
             fpath = pending_dir / f"{type}_{slug}_{suffix}.md"
             suffix += 1
 
-        source_val = "ephemeral" if ephemeral else "ai-proposed"
+        # Solo mode: write as human-approved directly. Ephemeral always wins
+        # over solo (auto-expire still applies) so users can still queue
+        # short-lived AI-extracted candidates even in solo mode.
+        from .. import workspace as _ws
+        solo_enabled, solo_approver = _ws.is_solo()
+
+        if ephemeral:
+            source_val = "ephemeral"
+            approved_by = "~"
+            confidence = "low"
+        elif solo_enabled:
+            source_val = "human"
+            approved_by = solo_approver
+            confidence = "medium"
+        else:
+            source_val = "ai-proposed"
+            approved_by = "~"
+            confidence = "medium"
+
         entry = (
             f"---\n"
             f"type: {type}\n"
@@ -216,9 +276,9 @@ def register(mcp: FastMCP) -> None:
             f"topic: {topic}\n"
             f"valid_at: {date}\n"
             f"invalid_at: ~\n"
-            f"confidence: {'low' if ephemeral else 'medium'}\n"
+            f"confidence: {confidence}\n"
             f"source: {source_val}\n"
-            f"approved_by: ~\n"
+            f"approved_by: {approved_by}\n"
             f"---\n\n"
             f"{content.strip()}\n"
         )
@@ -274,12 +334,25 @@ def register(mcp: FastMCP) -> None:
         except Exception:
             pass
 
-        msg = (
-            f"Proposed: `{rel}`\n\n"
-            f"Run `context_review` to see all pending proposals, "
-            f"or `context_approve` to approve this one directly.\n"
-            f"Open the approval dashboard: `cruxhive ui`"
-        )
+        if source_val == "human":
+            msg = (
+                f"Written: `{rel}`  (solo mode — auto-approved as **{approved_by}**)\n\n"
+                f"Disable solo mode with `cruxhive solo --disable` if you want "
+                f"the normal pending queue."
+            )
+        elif source_val == "ephemeral":
+            msg = (
+                f"Filed ephemeral: `{rel}`\n\n"
+                f"Auto-expires in 7 days unless promoted. "
+                f"Run `context_review` or `cruxhive ui` to approve."
+            )
+        else:
+            msg = (
+                f"Proposed: `{rel}`\n\n"
+                f"Run `context_review` to see all pending proposals, "
+                f"or `context_approve` to approve this one directly.\n"
+                f"Open the approval dashboard: `cruxhive ui`"
+            )
         if warnings:
             msg = "\n\n".join(warnings) + "\n\n" + msg
         return msg

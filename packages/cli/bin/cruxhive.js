@@ -14,10 +14,11 @@ const { status }  = require("../lib/status");
 const { doctor } = require("../lib/doctor");
 const { workspace } = require("../lib/workspace");
 const { direnv }    = require("../lib/direnv");
+const { solo }      = require("../lib/solo");
 
 const [, , cmd, ...args] = process.argv;
 
-const commands = { init, sync, health, ui, index, propose, review, stats, digest, status, doctor, workspace, direnv };
+const commands = { init, sync, health, ui, index, propose, review, stats, digest, status, doctor, workspace, direnv, solo };
 
 if (!cmd || cmd === "--help" || cmd === "-h") {
   console.log(`cruxhive v${require("../package.json").version}
@@ -37,6 +38,8 @@ Commands:
   doctor    Diagnose CruxHive setup — symlinks, hooks, slash commands
   workspace Cross-project rollup — aggregate KPIs across all configured projects
   direnv    Write a .envrc that auto-logs sessions for Cursor/Windsurf/Gemini
+  solo      Enable/disable solo mode — auto-approve your own proposals
+            Run with --status to check current mode, --disable to turn off
   ui        Open the approval queue dashboard (localhost:3847)
             Add --workspace to see cross-project rollup view
 

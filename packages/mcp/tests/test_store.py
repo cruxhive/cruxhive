@@ -223,3 +223,48 @@ def test_recency_boost_bands():
     assert store._recency_boost(now - 60 * 86400, now) == 0.05  # 60 days
     assert store._recency_boost(now - 200 * 86400, now) == 0.0  # 200 days
     assert store._recency_boost(None) == 0.0
+
+
+# ── Solo mode ────────────────────────────────────────────────────────────────
+
+def test_solo_mode_default_off(monkeypatch, tmp_path):
+    """is_solo returns (False, '') when no config + no env var."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CRUXHIVE_SOLO", raising=False)
+    from cruxhive_mcp import workspace as ws
+    # Force module to recompute config_path by reloading? Path.home() reads HOME on Unix.
+    enabled, approver = ws.is_solo()
+    assert enabled is False
+    assert approver == ""
+
+
+def test_solo_mode_env_var_enables(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("CRUXHIVE_SOLO", "1")
+    monkeypatch.setenv("CRUXHIVE_APPROVER", "tester")
+    from cruxhive_mcp import workspace as ws
+    enabled, approver = ws.is_solo()
+    assert enabled is True
+    assert approver == "tester"
+
+
+def test_solo_mode_config_file_enables(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("CRUXHIVE_SOLO", raising=False)
+    monkeypatch.delenv("CRUXHIVE_APPROVER", raising=False)
+    from cruxhive_mcp import workspace as ws
+    cfg_path = tmp_path / ".cruxhive" / "config.yaml"
+    cfg_path.parent.mkdir(parents=True)
+    cfg_path.write_text("solo:\n  enabled: true\n  approver: alice\n")
+    enabled, approver = ws.is_solo()
+    assert enabled is True
+    assert approver == "alice"
+
+
+def test_save_and_load_config_roundtrip(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    from cruxhive_mcp import workspace as ws
+    ws.save_config({"solo": {"enabled": True, "approver": "bob"}})
+    loaded = ws.load_config()
+    assert loaded["solo"]["enabled"] is True
+    assert loaded["solo"]["approver"] == "bob"
