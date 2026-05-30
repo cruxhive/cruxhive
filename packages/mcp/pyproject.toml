@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cruxhive-mcp"
-version = "0.8.0"
+version = "0.8.1"
 description = "CruxHive MCP server — team AI knowledge governance layer"
 readme = "README.md"
 license = { text = "MIT" }
@@ -66,3 +66,6 @@ cruxhive-ui      = "cruxhive_mcp.cli:ui"
 
 [tool.hatch.build.targets.wheel]
 packages = ["cruxhive_mcp"]
+# cruxhive_mcp/static/guide.html is bundled automatically because it lives
+# inside the package dir. Source of truth is docs/guide.html at the repo root;
+# scripts/sync-docs.sh copies it before each publish to keep them in sync.

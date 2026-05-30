@@ -20,6 +20,28 @@ except ImportError:
 from .. import events as _events
 from .. import store as _store
 
+# Path to bundled docs/guide.html (force-included by hatchling at wheel build).
+# Falls back to repo path when running editable from source.
+_BUNDLED_DOCS = Path(__file__).parent.parent / "static" / "guide.html"
+_REPO_DOCS = Path(__file__).resolve().parents[4] / "docs" / "guide.html"
+
+
+def _docs_html() -> str:
+    """Return the guide.html contents, preferring the bundled copy."""
+    for candidate in (_BUNDLED_DOCS, _REPO_DOCS):
+        if candidate.exists():
+            try:
+                return candidate.read_text(encoding="utf-8")
+            except Exception:
+                continue
+    return (
+        "<!doctype html><html><body style='font-family:sans-serif;padding:2rem;background:#0f1117;color:#e2e8f0'>"
+        "<h1>Docs not bundled</h1>"
+        "<p>This CruxHive build doesn't include <code>guide.html</code>. "
+        "See <a href='https://github.com/cruxhive/cruxhive/blob/main/docs/guide.html' style='color:#a78bfa'>the GitHub source</a>.</p>"
+        "</body></html>"
+    )
+
 _HTML = """<!doctype html>
 <html lang="en">
 <head>
@@ -34,7 +56,7 @@ _HTML = """<!doctype html>
       display:flex;align-items:center;gap:1rem}
     header h1{font-size:1.1rem;font-weight:700;color:#f8fafc;letter-spacing:-.02em}
     header h1 span{color:#6366f1}
-    .stats{display:flex;gap:1.5rem;margin-left:auto}
+    .stats{display:flex;gap:1.5rem;margin-left:auto;margin-right:1rem}
     .stat{font-size:.75rem;color:#94a3b8}
     .stat strong{color:#e2e8f0;font-size:.9rem;display:block}
     nav.tabs{display:flex;gap:0;border-bottom:1px solid #1e2636;
@@ -126,12 +148,28 @@ _HTML = """<!doctype html>
     .kpi-chip.bad strong{color:#f87171}
     .kpi-chip .label{font-size:.62rem;text-transform:uppercase;
       letter-spacing:.05em;color:#64748b;margin-top:.15rem}
+    [data-tip]{position:relative}
+    [data-tip]:hover::after{
+      content:attr(data-tip);position:absolute;left:50%;top:100%;transform:translateX(-50%);
+      margin-top:.4rem;background:#0d1018;border:1px solid #2d3748;
+      border-radius:.35rem;padding:.55rem .75rem;font-size:.72rem;
+      font-weight:400;color:#cbd5e1;line-height:1.4;
+      white-space:pre-wrap;width:260px;text-align:left;z-index:100;
+      box-shadow:0 4px 16px #000c;text-transform:none;letter-spacing:0;
+      pointer-events:none}
+    [data-tip]:hover::before{
+      content:'';position:absolute;left:50%;top:100%;transform:translateX(-50%);
+      margin-top:.05rem;border:5px solid transparent;border-bottom-color:#2d3748;
+      z-index:101;pointer-events:none}
   </style>
 </head>
 <body>
 <header>
   <h1>Crux<span>Hive</span></h1>
   <div class="stats" id="stats"></div>
+  <a href="/docs" target="_blank" rel="noopener" title="Open the CruxHive guide in a new tab"
+     style="color:#94a3b8;font-size:.78rem;text-decoration:none;
+            padding:.35rem .7rem;border:1px solid #2d3748;border-radius:.3rem">Docs ↗</a>
 </header>
 <div class="kpi-strip" id="kpi-strip"></div>
 <nav class="tabs">
@@ -279,25 +317,35 @@ async function loadKpiStrip() {
   const hitRate = k.searches ? Math.round((k.hits / k.searches) * 100) : null;
   const decayPct = k.total_entries ? Math.round((k.decayed_count / k.total_entries) * 100) : 0;
 
+  const TIPS = {
+    sessions: 'AI tool sessions started in the last 7 days. Auto-logged by the SessionStart hook. Distinct from Searches — sessions count up automatically, searches only when AI calls context_search.',
+    hitRate: 'Percentage of context_search calls that returned ≥1 result. Green ≥70% · Yellow ≥50% · Red <50%. Low = KB too thin or wrong topics.',
+    gaps: 'Distinct zero-result queries in the last 30 days. Each one is a candidate to document. Green ≤2 · Yellow ≤5 · Red >5.',
+    pending: 'AI-proposed entries waiting for human approval. Color reflects age of the oldest entry: green ≤3d · yellow ≤14d · red >14d.',
+    decayed: 'High-confidence entries that decayed by age (not revalidated). Color reflects ratio: green ≤5% · yellow ≤15% · red >15%.',
+    entries: 'Total markdown knowledge entries indexed for this project (.llm/ + ~/.cruxhive/personal/).',
+    constraints: 'Approved "constraint"-type entries — the rules the AI is checked against via NLI faithfulness.',
+  };
+
   const chips = [];
-  chips.push(`<div class="kpi-chip ${(k.sessions || 0) > 0 ? 'good' : ''}">
+  chips.push(`<div class="kpi-chip ${(k.sessions || 0) > 0 ? 'good' : ''}" data-tip="${TIPS.sessions}">
     <strong>${k.sessions || 0}</strong><span class="label">Sessions (7d)</span></div>`);
   if (hitRate !== null) {
-    chips.push(`<div class="kpi-chip ${kpiClass(hitRate, {good:70, warn:50})}">
+    chips.push(`<div class="kpi-chip ${kpiClass(hitRate, {good:70, warn:50})}" data-tip="${TIPS.hitRate}">
       <strong>${hitRate}%</strong><span class="label">Hit rate</span></div>`);
   } else {
-    chips.push(`<div class="kpi-chip">
+    chips.push(`<div class="kpi-chip" data-tip="${TIPS.hitRate}">
       <strong>—</strong><span class="label">Hit rate</span></div>`);
   }
-  chips.push(`<div class="kpi-chip ${kpiClass(k.gaps_30d, {good:2, warn:5}, true)}">
+  chips.push(`<div class="kpi-chip ${kpiClass(k.gaps_30d, {good:2, warn:5}, true)}" data-tip="${TIPS.gaps}">
     <strong>${k.gaps_30d}</strong><span class="label">Gaps (30d)</span></div>`);
-  chips.push(`<div class="kpi-chip ${kpiClass(k.pending_oldest_days || 0, {good:3, warn:14}, true)}">
+  chips.push(`<div class="kpi-chip ${kpiClass(k.pending_oldest_days || 0, {good:3, warn:14}, true)}" data-tip="${TIPS.pending}">
     <strong>${k.pending_count}</strong><span class="label">Pending${k.pending_count ? ` · ${k.pending_oldest_days}d` : ''}</span></div>`);
-  chips.push(`<div class="kpi-chip ${kpiClass(decayPct, {good:5, warn:15}, true)}">
+  chips.push(`<div class="kpi-chip ${kpiClass(decayPct, {good:5, warn:15}, true)}" data-tip="${TIPS.decayed}">
     <strong>${k.decayed_count}</strong><span class="label">Decayed · ${decayPct}%</span></div>`);
-  chips.push(`<div class="kpi-chip">
+  chips.push(`<div class="kpi-chip" data-tip="${TIPS.entries}">
     <strong>${k.total_entries}</strong><span class="label">Entries</span></div>`);
-  chips.push(`<div class="kpi-chip">
+  chips.push(`<div class="kpi-chip" data-tip="${TIPS.constraints}">
     <strong>${k.constraints}</strong><span class="label">Constraints</span></div>`);
 
   document.getElementById('kpi-strip').innerHTML = chips.join('');
@@ -484,6 +532,10 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
     def index():
         return _HTML
 
+    @app.get("/docs", response_class=HTMLResponse)
+    def docs():
+        return _docs_html()
+
     @app.get("/api/pending")
     def api_pending():
         conn = _store.connect(root)
@@ -608,6 +660,10 @@ header .mode{font-size:.7rem;color:#a78bfa;
 header .filler{flex:1}
 header select{background:#0f1117;border:1px solid #2d3748;color:#e2e8f0;
   padding:.4rem .65rem;border-radius:.3rem;font-size:.78rem;cursor:pointer}
+header a.docs-link{color:#94a3b8;font-size:.78rem;text-decoration:none;
+  padding:.4rem .75rem;border:1px solid #2d3748;border-radius:.3rem;
+  transition:all .15s}
+header a.docs-link:hover{color:#e2e8f0;border-color:#475569;background:#161c2d}
 main{max-width:1180px;margin:1.5rem auto;padding:0 1.5rem}
 h2{font-size:.78rem;font-weight:600;text-transform:uppercase;
   letter-spacing:.06em;color:#64748b;margin:1.5rem 0 .75rem;
@@ -641,6 +697,22 @@ h2 .count{font-size:.7rem;color:#475569;font-weight:400;
 .kpi-value.warn{color:#fbbf24}
 .kpi-value.bad{color:#f87171}
 .kpi-sub{font-size:.66rem;color:#64748b;margin-top:.15rem}
+
+/* ── Custom hover tooltip ──────────────────────────────────────── */
+[data-tip]{position:relative}
+[data-tip]:hover::after{
+  content:attr(data-tip);
+  position:absolute;left:50%;top:100%;transform:translateX(-50%);
+  margin-top:.4rem;background:#0d1018;border:1px solid #2d3748;
+  border-radius:.35rem;padding:.55rem .75rem;font-size:.72rem;
+  font-weight:400;color:#cbd5e1;line-height:1.4;
+  white-space:pre-wrap;width:260px;text-align:left;z-index:100;
+  box-shadow:0 4px 16px #000c;text-transform:none;letter-spacing:0;
+  pointer-events:none}
+[data-tip]:hover::before{
+  content:'';position:absolute;left:50%;top:100%;transform:translateX(-50%);
+  margin-top:.05rem;border:5px solid transparent;border-bottom-color:#2d3748;
+  z-index:101;pointer-events:none}
 .kpi-delta{font-size:.65rem;font-weight:600;margin-left:.3rem}
 .kpi-delta.up{color:#86efac}
 .kpi-delta.down{color:#f87171}
@@ -731,6 +803,7 @@ h2 .count{font-size:.7rem;color:#475569;font-weight:400;
   <h1>Crux<span>Hive</span></h1>
   <span class="mode">Workspace</span>
   <span class="filler"></span>
+  <a class="docs-link" href="/docs" target="_blank" rel="noopener" title="Open the CruxHive guide in a new tab">Docs ↗</a>
   <label style="font-size:.7rem;color:#64748b">window:</label>
   <select id="window" onchange="load()">
     <option value="7" selected>Last 7 days</option>
@@ -826,25 +899,32 @@ async function load() {
 
   const kpis = [
     {label: 'Projects', value: agg.projects || 0,
-     sub: errored.length ? `${errored.length} error(s)` : `${agg.active_projects || 0} active`},
+     sub: errored.length ? `${errored.length} error(s)` : `${agg.active_projects || 0} active`,
+     tip: 'Total CruxHive-initialized projects discovered. "Active" = had ≥1 session_start event in the window.'},
     {label: 'Sessions', value: agg.sessions || 0,
      sub: agg.sessions ? `last ${days}d` : 'no sessions yet',
-     cls: (agg.sessions || 0) > 0 ? 'good' : 'muted'},
-    {label: 'Entries', value: agg.total_entries || 0},
+     cls: (agg.sessions || 0) > 0 ? 'good' : 'muted',
+     tip: 'Number of AI tool sessions started (Claude Code, OpenCode, etc.). Auto-logged by the SessionStart hook. >0 means CruxHive is being loaded. Distinct from "Searches".'},
+    {label: 'Entries', value: agg.total_entries || 0,
+     tip: 'Markdown knowledge entries indexed across all projects. Includes project, org, and personal layers.'},
     {label: 'Pending', value: agg.pending_count || 0,
-     cls: agg.pending_count > 5 ? 'warn' : (agg.pending_count > 0 ? '' : 'muted')},
+     cls: agg.pending_count > 5 ? 'warn' : (agg.pending_count > 0 ? '' : 'muted'),
+     tip: 'AI-proposed entries waiting for human approval. 0 = clean. 1-5 = normal. >5 = review backlog forming.'},
     {label: 'Hit rate', value: hitRate === null ? '—' : fmtPct(hitRate),
      sub: agg.searches ? `${agg.searches} searches` : 'no searches yet',
-     cls: hitRate === null ? 'muted' : colorClass(hitRate * 100, {good: 70, warn: 50})},
+     cls: hitRate === null ? 'muted' : colorClass(hitRate * 100, {good: 70, warn: 50}),
+     tip: '% of context_search calls that returned ≥1 result. Green ≥70% · Yellow ≥50% · Red <50%. Low = KB too thin or wrong topics — see Top Gaps.'},
     {label: 'Constraints', value: agg.constraints || 0,
-     cls: (agg.constraints || 0) === 0 ? 'muted' : ''},
+     cls: (agg.constraints || 0) === 0 ? 'muted' : '',
+     tip: 'Approved "constraint"-type entries — the rules that AI faithfulness checks are run against. The most important entry type.'},
     {label: 'Decayed', value: agg.decayed_count || 0,
      sub: agg.total_entries ? fmtPct(decayPct) + ' of total' : '',
-     cls: decayPct > 0.15 ? 'warn' : (agg.decayed_count > 0 ? '' : 'muted')},
+     cls: decayPct > 0.15 ? 'warn' : (agg.decayed_count > 0 ? '' : 'muted'),
+     tip: 'High-confidence entries auto-downgraded because they haven\\'t been revalidated. >15% of total = audit time. Update valid_at: or set invalid_at: to deprecate.'},
   ];
 
   document.getElementById('kpis').innerHTML = kpis.map(k => `
-    <div class="kpi">
+    <div class="kpi" data-tip="${esc(k.tip || '')}">
       <div class="kpi-label">${k.label}</div>
       <div class="kpi-value ${k.cls || ''}">${k.value}</div>
       ${k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
@@ -1058,6 +1138,10 @@ def make_workspace_app() -> "FastAPI":  # type: ignore[name-defined]
     @app.get("/", response_class=HTMLResponse)
     def index():
         return _WORKSPACE_HTML
+
+    @app.get("/docs", response_class=HTMLResponse)
+    def docs():
+        return _docs_html()
 
     @app.get("/api/workspace")
     def api_workspace(days: int = 7):
