@@ -263,6 +263,45 @@ def list_pending(conn: sqlite3.Connection) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def list_approved_constraints(conn: sqlite3.Connection) -> list[dict]:
+    """All approved (non-deprecated) constraints — used for conflict checks."""
+    rows = conn.execute("""
+        SELECT path, topic, content
+        FROM entries
+        WHERE type = 'constraint'
+          AND source = 'human'
+          AND (invalid_at IS NULL OR invalid_at IN ('~','null','none',''))
+    """).fetchall()
+    return [dict(r) for r in rows]
+
+
+def annotate_pending_conflicts(conn: sqlite3.Connection, pending: list[dict]) -> list[dict]:
+    """Add a `conflicts` list to each pending entry.
+
+    Reads full content for each pending entry, then runs an NLI check against
+    every approved constraint. Silent no-op if NLI model isn't installed.
+    """
+    try:
+        from . import nli
+        if not nli.is_available():
+            return pending
+    except Exception:
+        return pending
+
+    constraints = list_approved_constraints(conn)
+    if not constraints:
+        return pending
+
+    for p in pending:
+        row = conn.execute("SELECT content FROM entries WHERE path=?", (p["path"],)).fetchone()
+        if not row:
+            p["conflicts"] = []
+            continue
+        body = row["content"]
+        p["conflicts"] = nli.check_conflicts(body, constraints)
+    return pending
+
+
 def approve(conn: sqlite3.Connection, path: str, approver: str, root: str) -> bool:
     fpath = Path(root) / path
     if not fpath.exists():
@@ -290,6 +329,83 @@ def reject(conn: sqlite3.Connection, path: str, root: str) -> bool:
     conn.execute("DELETE FROM entries WHERE path=?", (path,))
     conn.commit()
     return True
+
+
+# ── Confidence decay ──────────────────────────────────────────────────────────
+
+# Days an entry can sit at its stored level before decay kicks in.
+_DECAY_HIGH_DAYS = 60   # high → medium after this
+_DECAY_MED_DAYS = 120   # medium → low after this
+_DECAY_ORDER = ("low", "medium", "high")
+
+
+def _age_days(valid_at: str | None, mtime: float | None) -> int | None:
+    """Days since the entry was last (re)validated."""
+    if valid_at:
+        try:
+            d = datetime.date.fromisoformat(valid_at[:10])
+            return (datetime.date.today() - d).days
+        except Exception:
+            pass
+    if mtime:
+        import time as _t
+        return int((_t.time() - mtime) / 86400)
+    return None
+
+
+def effective_confidence(stored: str | None, valid_at: str | None,
+                         mtime: float | None) -> tuple[str, int]:
+    """Compute effective confidence given age. Returns (effective, age_days).
+
+    Decay rules:
+        high   stays high until {DECAY_HIGH_DAYS}d, then → medium
+        medium stays medium until {DECAY_MED_DAYS}d (from valid_at), then → low
+        low    stays low
+
+    Never increases confidence. Returns the stored value unchanged if
+    valid_at/mtime are unavailable.
+    """
+    age = _age_days(valid_at, mtime)
+    s = (stored or "").strip().lower()
+    if s not in _DECAY_ORDER or age is None:
+        return (stored or "", age or 0)
+    if s == "high" and age >= _DECAY_HIGH_DAYS:
+        return ("medium" if age < _DECAY_MED_DAYS else "low", age)
+    if s == "medium" and age >= _DECAY_MED_DAYS:
+        return ("low", age)
+    return (s, age)
+
+
+def annotate_decay(conn: sqlite3.Connection, rows: list[dict]) -> list[dict]:
+    """Add `effective_confidence` and `age_days` fields to each row."""
+    for r in rows:
+        eff, age = effective_confidence(r.get("confidence"), r.get("valid_at"), r.get("mtime"))
+        r["effective_confidence"] = eff
+        r["age_days"] = age
+        r["decayed"] = (
+            eff != (r.get("confidence") or "").strip().lower()
+            and bool(r.get("confidence"))
+        )
+    return rows
+
+
+def stale_high_confidence(conn: sqlite3.Connection) -> list[dict]:
+    """Entries stored as high but decayed by age."""
+    rows = conn.execute("""
+        SELECT path, type, topic, confidence, valid_at, mtime
+        FROM entries
+        WHERE LOWER(COALESCE(confidence,'')) = 'high'
+          AND (invalid_at IS NULL OR invalid_at IN ('~','null','none',''))
+    """).fetchall()
+    out = []
+    for r in rows:
+        eff, age = effective_confidence(r["confidence"], r["valid_at"], r["mtime"])
+        if eff != "high":
+            d = dict(r)
+            d["effective_confidence"] = eff
+            d["age_days"] = age
+            out.append(d)
+    return sorted(out, key=lambda x: -x["age_days"])
 
 
 # ── Stats ─────────────────────────────────────────────────────────────────────

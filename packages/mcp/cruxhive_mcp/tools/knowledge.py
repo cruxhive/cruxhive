@@ -180,11 +180,16 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True))
     @_events.trace("context_review")
     def context_review(project_root: str | None = None) -> str:
-        """List all pending AI-proposed knowledge entries awaiting human approval."""
+        """List all pending AI-proposed knowledge entries awaiting human approval.
+
+        If cruxhive-mcp[full] is installed, each entry is also scanned via NLI
+        for conflicts with existing approved constraints, surfaced inline.
+        """
         root = project_root or os.getcwd()
         try:
             conn = _store.connect(root)
             pending = _store.list_pending(conn)
+            pending = _store.annotate_pending_conflicts(conn, pending)
             conn.close()
 
             if not pending:
@@ -201,6 +206,16 @@ def register(mcp: FastMCP) -> None:
                 preview = (p.get("preview") or "").strip()[:120]
                 if preview:
                     lines.append(f"  > {preview}…")
+
+                conflicts = p.get("conflicts") or []
+                if conflicts:
+                    lines.append(f"  ⚠ **{len(conflicts)} potential conflict(s):**")
+                    for c in conflicts[:3]:
+                        lines.append(
+                            f"    · [{c['severity']}] {c['path']} "
+                            f"(score: {c['score']}) — {c['preview']}"
+                        )
+
                 lines.append(
                     f"  ✓ `context_approve path=\"{p['path']}\" approver=\"<your-name>\"`"
                 )

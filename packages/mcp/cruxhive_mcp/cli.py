@@ -111,6 +111,141 @@ def approve() -> None:
         sys.exit(1)
 
 
+def digest() -> None:
+    """cruxhive-digest: weekly markdown report of gaps, staleness, queue health."""
+    from datetime import date
+    from pathlib import Path
+    from . import events as _events
+    from . import store as _store
+
+    days = 7
+    args = sys.argv[1:]
+    for i, a in enumerate(args):
+        if a in ("--days", "-d") and i + 1 < len(args) and args[i + 1].isdigit():
+            days = int(args[i + 1])
+
+    root = os.getcwd()
+    proj = Path(root).name
+    if not (Path(root) / ".llm" / "cruxhive.db").exists():
+        print(f"# CruxHive digest — {proj}\n\n_No knowledge base yet. Run `cruxhive init` then `cruxhive index`._")
+        sys.exit(1)
+
+    conn = _store.connect(root)
+    summary = _events.summary(conn, days=days)
+    by_tool = _events.by_tool(conn, days=days)
+    gaps = _events.top_gaps(conn, days=max(days, 30), limit=10)
+    pend = _events.pending_age(conn)
+    decayed = _store.stale_high_confidence(conn)
+    kb = _store.stats(conn)
+    conn.close()
+
+    today = date.today().isoformat()
+    out = []
+    out.append(f"# CruxHive digest — {proj}")
+    out.append(f"_Generated {today} · window: last {days} days_\n")
+
+    # Headline
+    hit_pct = f"{summary['hit_rate']*100:.0f}%" if summary["searches"] else "—"
+    out.append(f"## Snapshot")
+    out.append(f"- **{kb['total']}** entries · **{kb['pending']}** pending · **{kb['constraints']}** constraints")
+    out.append(f"- **{summary['total_calls']}** tool calls · **{summary['searches']}** searches · **{hit_pct}** hit rate")
+    out.append(f"- **{summary['proposals']}** new proposals\n")
+
+    # Gaps — most actionable
+    if gaps:
+        out.append(f"## Top knowledge gaps")
+        out.append(f"_Zero-result queries from your AI tools — most actionable list to document next._\n")
+        for i, g in enumerate(gaps, 1):
+            clients = g["clients"] or "?"
+            out.append(f"{i}. **{g['query']}** — searched {g['times']}× by {clients}")
+        out.append("")
+        out.append("→ Use `/propose` (or `cruxhive propose`) to capture entries for these.\n")
+    else:
+        out.append(f"## Top knowledge gaps\n_None — every recent search found something._\n")
+
+    # Stale high-confidence entries
+    if decayed:
+        out.append(f"## High-confidence entries that have decayed")
+        out.append(f"_These were marked `confidence: high` but haven't been revalidated. Effective confidence has been auto-downgraded for search ranking._\n")
+        for d in decayed[:8]:
+            out.append(f"- `{d['path']}` — {d['age_days']}d old, now **{d['effective_confidence']}** (was high)")
+        if len(decayed) > 8:
+            out.append(f"- … and {len(decayed) - 8} more")
+        out.append("")
+        out.append("→ Re-read each, update `valid_at:` to today, or set `invalid_at:` to deprecate.\n")
+
+    # Per-AI-tool divergence
+    if len(by_tool) > 1:
+        out.append(f"## Per-AI-tool divergence")
+        out.append(f"| Tool | Calls | Hit rate | Zero-results | Proposals |")
+        out.append(f"|------|------:|---------:|-------------:|----------:|")
+        for r in by_tool:
+            hits = r.get("hits") or 0
+            searches = r.get("searches") or 0
+            pct = f"{hits/searches*100:.0f}%" if searches else "—"
+            out.append(f"| {r['client']} | {r['calls']} | {pct} | {r.get('zero_results') or 0} | {r.get('proposals') or 0} |")
+        out.append("")
+        out.append("→ A tool with low hit rate may need better prompts that mention CruxHive; high zero-result count signals missing knowledge for that tool's workflow.\n")
+    elif by_tool:
+        out.append(f"## AI tool usage")
+        r = by_tool[0]
+        hits = r.get("hits") or 0
+        searches = r.get("searches") or 0
+        pct = f"{hits/searches*100:.0f}%" if searches else "—"
+        out.append(f"Single tool active: **{r['client']}** ({r['calls']} calls, {pct} hit rate). Add another (OpenCode, Cursor, ...) to compare.\n")
+
+    # Pending queue
+    if pend["count"]:
+        out.append(f"## Pending approval queue")
+        out.append(f"- **{pend['count']}** proposals waiting")
+        out.append(f"- Oldest: **{pend['oldest_days']}d** · Avg age: **{pend['avg_days']}d**")
+        if pend["oldest_days"] > 14:
+            out.append(f"- ⚠ Queue is stale — review backlog before adding more.")
+        out.append("")
+        out.append("→ Run `/review`, `cruxhive review`, or open `cruxhive ui`.\n")
+
+    # Suggested actions
+    out.append(f"## Suggested next actions")
+    suggestions = []
+    if gaps:
+        suggestions.append(f"Document the top {min(3, len(gaps))} gap{'s' if len(gaps) > 1 else ''}")
+    if decayed:
+        suggestions.append(f"Revalidate the {len(decayed)} decayed high-confidence entr{'ies' if len(decayed) != 1 else 'y'}")
+    if pend["count"] and pend["oldest_days"] > 7:
+        suggestions.append("Drain the pending review queue")
+    if not suggestions:
+        suggestions.append("Knowledge base is healthy. Carry on.")
+    for s in suggestions:
+        out.append(f"- {s}")
+
+    print("\n".join(out))
+
+
+def search() -> None:
+    """cruxhive-search: BM25 search. Prints JSON. Args: <query> [n]"""
+    import json
+    args = sys.argv[1:]
+    if not args:
+        print("Usage: cruxhive-search <query> [n]", file=sys.stderr)
+        sys.exit(1)
+    n = int(args[1]) if len(args) > 1 and args[1].isdigit() else 5
+    from . import store as _store
+    root = os.getcwd()
+    try:
+        conn = _store.connect(root)
+        hits = _store.search_bm25(conn, args[0], n)
+        conn.close()
+        # Trim to fields the CLI cares about
+        out = [
+            {"path": h.get("path"), "topic": h.get("topic"),
+             "type": h.get("type"), "snippet": (h.get("snippet") or "")[:160]}
+            for h in hits
+        ]
+        print(json.dumps(out))
+    except Exception as e:
+        print(json.dumps({"error": str(e)}))
+
+
 def reject() -> None:
     """cruxhive-reject: reject a pending entry. Args: <path>"""
     args = sys.argv[1:]
@@ -249,12 +384,15 @@ def stats() -> None:
     print()
 
     # Knowledge base health
+    decayed = _store.stale_high_confidence(conn)
     print(f"  {_c('Knowledge base', '36')}")
     print(f"    {kb_stats['total']:>5}  entries indexed")
     print(f"    {kb_stats['pending']:>5}  pending approval"
           + (f" (oldest {pend['oldest_days']}d, avg {pend['avg_days']}d)"
              if pend["count"] else ""))
     print(f"    {kb_stats['constraints']:>5}  constraints")
+    if decayed:
+        print(f"    {len(decayed):>5}  high-confidence entries decayed (need revalidation)")
     if kb_stats["by_type"]:
         types = " · ".join(f"{t}:{n}" for t, n in sorted(kb_stats["by_type"].items()))
         print(f"           {_c(types, '90')}")

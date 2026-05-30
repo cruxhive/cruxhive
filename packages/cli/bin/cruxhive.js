@@ -9,10 +9,11 @@ const { index }   = require("../lib/index");
 const { propose } = require("../lib/propose");
 const { review }  = require("../lib/review");
 const { stats }   = require("../lib/stats");
+const { digest }  = require("../lib/digest");
 
 const [, , cmd, ...args] = process.argv;
 
-const commands = { init, sync, health, ui, index, propose, review, stats };
+const commands = { init, sync, health, ui, index, propose, review, stats, digest };
 
 if (!cmd || cmd === "--help" || cmd === "-h") {
   console.log(`cruxhive v${require("../package.json").version}
@@ -27,6 +28,7 @@ Commands:
   sync      Sync org-layer context from the configured remote
   health    Show knowledge base health summary
   stats     Usage observability — searches, hit rate, gaps, by AI tool
+  digest    Weekly markdown digest — gaps, decayed entries, queue health
   ui        Open the approval queue dashboard (localhost:3847)
 
 Options:

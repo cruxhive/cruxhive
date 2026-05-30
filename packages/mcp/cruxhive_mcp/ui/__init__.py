@@ -70,6 +70,12 @@ _HTML = """<!doctype html>
       background:#0f1117;border-left:2px solid #1e2636;
       padding:.5rem .75rem;border-radius:0 .25rem .25rem 0;
       margin-bottom:.875rem;white-space:pre-wrap;max-height:120px;overflow:hidden}
+    .conflict-box{background:#3b1414;border-left:2px solid #f87171;
+      padding:.55rem .75rem;border-radius:0 .25rem .25rem 0;
+      margin-bottom:.875rem;font-size:.78rem;color:#fca5a5}
+    .conflict-box .conflict-title{font-weight:600;margin-bottom:.3rem;color:#fecaca}
+    .conflict-box .conflict-item{font-family:monospace;font-size:.72rem;
+      color:#fda4af;margin-top:.25rem;opacity:.85}
     .actions{display:flex;gap:.5rem}
     button{cursor:pointer;font-size:.78rem;font-weight:600;padding:.4rem .9rem;
       border-radius:.3rem;border:none;transition:opacity .15s}
@@ -254,7 +260,16 @@ async function loadApprovals() {
     list.innerHTML = '<div class="empty">No pending proposals — knowledge base is fully reviewed ✓</div>';
     return;
   }
-  list.innerHTML = pending.map(p => `
+  list.innerHTML = pending.map(p => {
+    const conflictsHtml = (p.conflicts && p.conflicts.length)
+      ? `<div class="conflict-box">
+           <div class="conflict-title">⚠ ${p.conflicts.length} potential conflict(s) with approved constraint(s)</div>
+           ${p.conflicts.slice(0,3).map(c =>
+             `<div class="conflict-item">· [${c.severity}] ${c.path} (score: ${c.score}) — ${c.preview || ''}</div>`
+           ).join('')}
+         </div>`
+      : '';
+    return `
     <div class="card" id="card-${btoa(p.path)}">
       <div class="card-header">
         ${badge(p.type)}
@@ -262,12 +277,14 @@ async function loadApprovals() {
       </div>
       <div class="meta">${p.topic ? `topic: ${p.topic} · ` : ''}proposed: ${p.valid_at||'?'}</div>
       <div class="preview">${p.preview || ''}</div>
+      ${conflictsHtml}
       <div class="actions">
         <button class="btn-approve" onclick="approve('${p.path}')">✓ Approve</button>
         <button class="btn-reject" onclick="reject('${p.path}')">✗ Reject</button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 async function loadUsage() {
@@ -414,6 +431,7 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
     def api_pending():
         conn = _store.connect(root)
         data = _store.list_pending(conn)
+        data = _store.annotate_pending_conflicts(conn, data)
         conn.close()
         return data
 

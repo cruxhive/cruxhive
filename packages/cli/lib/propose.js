@@ -2,7 +2,6 @@
 
 const { spawnSync } = require("child_process");
 const { createInterface } = require("readline");
-const { execSync } = require("child_process");
 const { writeFileSync, unlinkSync, readFileSync } = require("fs");
 const { tmpdir } = require("os");
 const { join } = require("path");
@@ -11,6 +10,16 @@ const TYPES = ["fact", "decision", "plan", "pattern", "constraint", "research", 
 
 function prompt(rl, question) {
   return new Promise((res) => rl.question(question, res));
+}
+
+function searchSimilar(query, n = 3) {
+  const r = spawnSync("cruxhive-search", [query, String(n)], { stdio: ["ignore", "pipe", "pipe"] });
+  if (r.status !== 0) return [];
+  try {
+    const out = JSON.parse(r.stdout.toString());
+    if (Array.isArray(out)) return out;
+  } catch { /* fall through */ }
+  return [];
 }
 
 async function selectType(rl) {
@@ -48,6 +57,22 @@ async function propose(_args) {
   if (!topic) { rl.close(); return; }
 
   const scope = (await prompt(rl, `  Scope [project]: `)).trim() || "project";
+
+  // ── Dedup check ──────────────────────────────────────────────────────────
+  const similar = searchSimilar(`${topic} ${type}`, 3);
+  if (similar.length) {
+    console.log(`\n  \x1b[33m!\x1b[0m  Similar entries already exist:`);
+    for (const s of similar) {
+      const snip = (s.snippet || "").trim().replace(/\s+/g, " ").slice(0, 80);
+      console.log(`     · ${s.path}  \x1b[90m[${s.type || "?"}]\x1b[0m  ${snip}`);
+    }
+    const ans = (await prompt(rl, `\n  Proceed anyway? [y/N]: `)).trim().toLowerCase();
+    if (ans !== "y" && ans !== "yes") {
+      console.log("  Proposal cancelled — edit the existing entry instead, or rerun with a different topic.");
+      rl.close();
+      return;
+    }
+  }
   rl.close();
 
   console.log(`\n  Opening editor for content…`);

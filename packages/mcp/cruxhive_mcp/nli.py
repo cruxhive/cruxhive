@@ -61,3 +61,40 @@ def check(response: str, constraints: list[str], threshold: float = 0.7) -> list
                 "severity": "high" if c_score >= 0.9 else "medium",
             })
     return violations
+
+
+def check_conflicts(
+    candidate: str,
+    approved_entries: list[dict],
+    threshold: float = 0.7,
+) -> list[dict]:
+    """Check whether a candidate entry contradicts any approved entry.
+
+    approved_entries: list of {"path": str, "content": str, ...}
+    Returns: [{"path": str, "score": float, "severity": ..., "preview": str}]
+    """
+    if not _load() or _model is None or not approved_entries or not candidate:
+        return []
+
+    pairs = [(candidate[:2048], (e.get("content") or "")[:512]) for e in approved_entries]
+    try:
+        scores = _model.predict(pairs, apply_softmax=True)
+    except Exception:
+        return []
+
+    conflicts = []
+    for score_row, entry in zip(scores, approved_entries):
+        if hasattr(score_row, "__iter__"):
+            c_score = float(score_row[_CONTRADICTION])
+        else:
+            c_score = float(score_row)
+        if c_score >= threshold:
+            preview = (entry.get("content") or "").strip().replace("\n", " ")[:120]
+            conflicts.append({
+                "path": entry.get("path", "?"),
+                "topic": entry.get("topic"),
+                "score": round(c_score, 3),
+                "severity": "high" if c_score >= 0.9 else "medium",
+                "preview": preview + ("…" if len(preview) >= 120 else ""),
+            })
+    return conflicts
