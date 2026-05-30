@@ -90,8 +90,11 @@
       <a href="#propose" class="nav-link">Proposing entries</a>
       <a href="#review" class="nav-link">Reviewing & approving</a>
       <a href="#search" class="nav-link">Searching</a>
-      <a href="#radar" class="nav-link">Radar & next-slice</a>
+      <a href="#radar" class="nav-link">Slash commands</a>
       <a href="#observability" class="nav-link">Observability</a>
+      <a href="#workspace" class="nav-link">Workspace & digest</a>
+      <a href="#memory" class="nav-link">Memory intelligence</a>
+      <a href="#automation" class="nav-link">Automation & hooks</a>
 
       <div class="nav-section mt-2">Reference</div>
       <a href="#cli" class="nav-link">CLI commands</a>
@@ -421,7 +424,8 @@
             <tr><td><code>/review</code></td><td>List CruxHive proposals awaiting approval</td><td><code>context_review</code></td></tr>
             <tr><td><code>/propose</code></td><td>Interactive: capture a new knowledge entry</td><td><code>context_propose</code></td></tr>
             <tr><td><code>/write-plan</code></td><td>Draft a new plan file under <code>.llm/plans/</code></td><td><code>context_write_plan</code></td></tr>
-            <tr><td><code>/extract</code></td><td>Distill the current session into candidate entries — dedup, classify, queue for review</td><td><code>context_search</code> + <code>context_propose</code></td></tr>
+            <tr><td><code>/extract</code></td><td>Distill the current session into <strong>N candidate entries</strong> — dedup, classify, present numbered list for user to pick from, queue selected for review</td><td><code>context_search</code> + <code>context_propose</code></td></tr>
+            <tr><td><code>/summarize</code></td><td>Distill the current session into <strong>one</strong> structured research entry (Background / Done / Decisions / Open questions / Next steps). Lower-friction counterpart to <code>/extract</code>.</td><td><code>context_search</code> + <code>context_propose</code></td></tr>
           </tbody>
         </table>
 
@@ -493,19 +497,117 @@
       </section>
 
       <!-- CLI REFERENCE -->
+      <!-- WORKSPACE + DIGEST + TRENDS -->
+      <section id="workspace">
+        <h2>Workspace rollup, digest, and trends</h2>
+        <p>Once you've initialized CruxHive in multiple projects, you can get a cross-project view of activity, gaps, and decay without cd-ing into each one.</p>
+
+        <h3>Cross-project KPIs in the terminal</h3>
+        <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400 not-prose mb-4">
+          <p><span class="text-zinc-600">$</span> cruxhive workspace</p>
+          <p class="text-zinc-500 text-xs mt-1 ml-4">→ Aggregate (entries · pending · sessions · hit rate · decayed) + per-project breakdown table.</p>
+          <p class="mt-2"><span class="text-zinc-600">$</span> cruxhive workspace --days 30 --json</p>
+        </div>
+        <p>Reads <code>~/.cruxhive/config.yaml</code> if present, otherwise auto-discovers projects under <code>~/Projects_Local/Development/</code>.</p>
+
+        <h3>Workspace dashboard in the browser</h3>
+        <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400 not-prose mb-4">
+          <p><span class="text-zinc-600">$</span> cruxhive ui --workspace</p>
+          <p class="text-zinc-500 text-xs mt-1 ml-4">→ Opens <code>localhost:3847</code> with a 7-KPI aggregate strip + clickable project cards + drilldown drawers.</p>
+        </div>
+
+        <h3>Weekly digest with trend comparison</h3>
+        <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400 not-prose mb-4">
+          <p><span class="text-zinc-600">$</span> cruxhive digest</p>
+          <p class="text-zinc-500 text-xs mt-1 ml-4">→ Markdown report: key indicators, activity, top gaps, decayed entries, by-tool divergence, pending queue, next-action suggestions. Auto-saved to <code>.llm/digests/{date}.json</code> + <code>.md</code>.</p>
+          <p class="mt-2"><span class="text-zinc-600">$</span> cruxhive digest --compare</p>
+          <p class="text-zinc-500 text-xs mt-1 ml-4">→ Same report with week-over-week deltas: <code class="text-green-400">↑+3</code> / <code class="text-red-400">↓-12</code> arrows per KPI.</p>
+        </div>
+
+        <h3>One-line health for hooks</h3>
+        <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400 not-prose mb-4">
+          <p><span class="text-zinc-600">$</span> cruxhive status</p>
+          <p class="text-zinc-500 text-xs mt-1 ml-4">→ <code>🐝 CruxHive: 3 pending · 5 gaps · digest 8d old  →  run cruxhive digest</code></p>
+          <p class="mt-2"><span class="text-zinc-600">$</span> cruxhive status --quiet --session-start</p>
+          <p class="text-zinc-500 text-xs mt-1 ml-4">→ Silent if all clear; logs a session_start event. Used by the SessionStart hook installed by <code>cruxhive init</code>.</p>
+        </div>
+
+        <h3>The 5 KPIs that matter</h3>
+        <table>
+          <thead><tr><th>KPI</th><th>Question it answers</th><th>Good · Warn · Bad</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Hit rate</strong></td><td>Does the KB have what AI is looking for?</td><td>≥70% · ≥50% · &lt;50%</td></tr>
+            <tr><td><strong>Sessions (7d)</strong></td><td>Is CruxHive actually being loaded?</td><td>any &gt;0 = active</td></tr>
+            <tr><td><strong>Gaps (30d)</strong></td><td>What to document next</td><td>≤2 · ≤5 · &gt;5</td></tr>
+            <tr><td><strong>Pending queue age</strong></td><td>Is governance loop healthy?</td><td>≤3d · ≤14d · &gt;14d</td></tr>
+            <tr><td><strong>Decay ratio</strong></td><td>Is knowledge rotting?</td><td>≤5% · ≤15% · &gt;15%</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- MEMORY INTELLIGENCE -->
+      <section id="memory">
+        <h2>Memory intelligence (without bypassing approval)</h2>
+        <p>Mem0 / Zep patterns adapted to CruxHive's human-gated model — no auto-write.</p>
+
+        <h3>Entity-aware search</h3>
+        <p>At index time, CruxHive extracts simple entities from each entry: snake_case identifiers, ALL_CAPS constants, IPv4s, hostnames, filenames with extensions. At search time, queries that mention any of those entities boost matching entries — and pull in entries BM25 would have missed entirely.</p>
+        <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400 not-prose mb-4">
+          <p><span class="text-zinc-600">$</span> cruxhive search "91.99.212.250"</p>
+          <p class="text-zinc-500 text-xs mt-1 ml-4">→ Returns entries mentioning that IP even though FTS5 doesn't tokenize it.</p>
+        </div>
+
+        <h3>Recency boost in search ranking</h3>
+        <p>Banded score multiplier on top of BM25 + vector + entity match: ≤7 days old +0.20, ≤30 days +0.10, ≤90 days +0.05. Recent edits float to the top without burying older but topically-relevant matches.</p>
+
+        <h3>Confidence decay (computed at search time)</h3>
+        <p><code>confidence: high</code> entries auto-downgrade as they age — to medium after 60 days, to low after 120 days. The stored frontmatter never changes; the effective confidence is computed live so search results reflect current trust. Decayed entries surface in <code>cruxhive digest</code> with a "revalidate or deprecate" prompt.</p>
+
+        <h3>Ephemeral entries</h3>
+        <p>Set <code>source: ephemeral</code> in the frontmatter (or pass <code>ephemeral=true</code> to <code>context_propose</code>) for AI-extracted "soft" facts. They auto-expire after 7 days unless explicitly approved and promoted to <code>source: human</code>. Catches Mem0-style decay without an auto-write gate.</p>
+
+        <h3>Conflict detection at review time</h3>
+        <p>If <code>cruxhive-mcp[full]</code> is installed, each pending entry is scanned by NLI against existing approved constraints. Contradictions are surfaced in both the CLI <code>cruxhive review</code> output and the web UI approval card — so you catch drift before approving, not after.</p>
+      </section>
+
+      <!-- AUTOMATION -->
+      <section id="automation">
+        <h2>Automation and hooks</h2>
+        <p>What <code>cruxhive init</code> wires up so CruxHive runs itself in the background.</p>
+
+        <table>
+          <thead><tr><th>Trigger</th><th>What fires</th><th>Result</th></tr></thead>
+          <tbody>
+            <tr><td>Every <code>git commit</code></td><td><code>.git/hooks/post-commit</code></td><td>Silent re-index of <code>.llm/</code></td></tr>
+            <tr><td>Claude Code session start</td><td><code>.claude/settings.json</code> SessionStart hook</td><td>Logs a <code>session_start</code> event, prints status if anything actionable</td></tr>
+            <tr><td>OpenCode session start</td><td><code>.opencode/plugins/cruxhive-status.js</code></td><td>Same as above</td></tr>
+            <tr><td><code>cd</code> into project dir (opt-in)</td><td><code>.envrc</code> via <code>direnv</code></td><td>Session event for Cursor / Windsurf / Gemini (which don't have native hooks). Run <code>cruxhive direnv</code> to install.</td></tr>
+            <tr><td>Every MCP tool call</td><td><code>events.trace</code> decorator</td><td>Logs the call (tool · query · result count · latency · client) to SQLite</td></tr>
+          </tbody>
+        </table>
+
+        <p class="mt-4">All logging is local. Opt out with <code>CRUXHIVE_ANALYTICS=0</code>. Rate-limited: repeated <code>cd</code> doesn't spam session events.</p>
+      </section>
+
       <section id="cli">
         <h2>CLI commands</h2>
         <table>
           <thead><tr><th>Command</th><th>What it does</th></tr></thead>
           <tbody>
-            <tr><td><code>cruxhive init</code></td><td>Bootstrap <code>.llm/</code>, install MCP server, wire AI tools, create CONTEXT.md</td></tr>
-            <tr><td><code>cruxhive index</code></td><td>Scan <code>.llm/</code> and (re)build the SQLite knowledge index</td></tr>
-            <tr><td><code>cruxhive propose</code></td><td>Interactive: type → topic → editor → writes to <code>.llm/pending/</code></td></tr>
-            <tr><td><code>cruxhive review</code></td><td>Terminal loop: approve or reject each pending entry</td></tr>
-            <tr><td><code>cruxhive health</code></td><td>Knowledge base audit — pending count, stale files, MCP status</td></tr>
-            <tr><td><code>cruxhive stats</code></td><td>Observability — searches/day, hit rate, zero-result gaps, per-AI-tool comparison. Use <code>--days N</code>, <code>--gaps</code>, <code>--stale</code>, <code>--export csv</code>, <code>--clear</code></td></tr>
-            <tr><td><code>cruxhive sync</code></td><td>Pull org-layer context from the configured <code>org_remote</code></td></tr>
-            <tr><td><code>cruxhive ui</code></td><td>Start web dashboard at <code>localhost:3847</code> — Approvals + Usage + By AI Tool + Gaps tabs (requires <code>[ui]</code> extra)</td></tr>
+            <tr><td><code>cruxhive init</code></td><td>Bootstrap <code>.llm/</code>, install MCP server, wire 5 AI tools, create CONTEXT.md, install hooks &amp; gitignore</td></tr>
+            <tr><td><code>cruxhive index</code></td><td>Scan <code>.llm/</code> + <code>~/.cruxhive/personal/</code> and (re)build SQLite index + entity tags. <code>--rebuild</code> forces full re-index.</td></tr>
+            <tr><td><code>cruxhive propose</code></td><td>Interactive: type → topic → editor → dedup-check → writes to <code>.llm/pending/</code></td></tr>
+            <tr><td><code>cruxhive review</code></td><td>Terminal loop: approve / reject / skip each pending entry. Surfaces NLI conflicts if installed.</td></tr>
+            <tr><td><code>cruxhive search "..."</code></td><td>BM25 + entity + recency search from terminal. JSON output for scripting.</td></tr>
+            <tr><td><code>cruxhive health</code></td><td>Knowledge base audit — three-tier status, pending count, stale files</td></tr>
+            <tr><td><code>cruxhive doctor</code></td><td>Setup audit — symlinks, hooks, slash commands, .gitignore, direnv. Reports problems with fix suggestions.</td></tr>
+            <tr><td><code>cruxhive status</code></td><td>One-line health summary for SessionStart hooks. <code>--quiet</code> = silent if clean. <code>--session-start</code> logs a session event.</td></tr>
+            <tr><td><code>cruxhive stats</code></td><td>Observability — searches/day, hit rate, gaps, per-AI-tool. <code>--days N · --gaps · --stale · --export csv · --clear</code>.</td></tr>
+            <tr><td><code>cruxhive digest</code></td><td>Markdown weekly report (auto-saved to <code>.llm/digests/</code>). <code>--compare</code> shows week-over-week deltas with arrows.</td></tr>
+            <tr><td><code>cruxhive workspace</code></td><td>Cross-project rollup — aggregates KPIs across every CruxHive-initialized project in <code>~/Projects_Local/Development/</code> (or config-listed paths).</td></tr>
+            <tr><td><code>cruxhive direnv</code></td><td>Write <code>.envrc</code> that logs a session_start when you <code>cd</code> in. Covers Cursor / Windsurf / Gemini (tools without SessionStart hooks). Requires <code>direnv</code> installed.</td></tr>
+            <tr><td><code>cruxhive sync</code></td><td>Pull org-layer context from the configured <code>org_remote</code> or workspace sync script</td></tr>
+            <tr><td><code>cruxhive ui</code></td><td>Web dashboard at <code>localhost:3847</code> — Approvals · Usage · By AI Tool · Gaps tabs + sticky KPI banner + /docs route. Add <code>--workspace</code> for the cross-project rollup view.</td></tr>
           </tbody>
         </table>
       </section>
