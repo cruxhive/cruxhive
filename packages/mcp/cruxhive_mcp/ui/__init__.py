@@ -35,10 +35,10 @@ def _docs_html() -> str:
             except Exception:
                 continue
     return (
-        "<!doctype html><html><body style='font-family:sans-serif;padding:2rem;background:#0f1117;color:#e2e8f0'>"
+        "<!doctype html><html><body style='font-family:sans-serif;padding:2rem;background:#0a0a0a;color:#e2e8f0'>"
         "<h1>Docs not bundled</h1>"
         "<p>This CruxHive build doesn't include <code>guide.html</code>. "
-        "See <a href='https://github.com/cruxhive/cruxhive/blob/main/docs/guide.html' style='color:#a78bfa'>the GitHub source</a>.</p>"
+        "See <a href='https://github.com/cruxhive/cruxhive/blob/main/docs/guide.html' style='color:#f5a524'>the GitHub source</a>.</p>"
         "</body></html>"
     )
 
@@ -48,31 +48,35 @@ _HTML = """<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>CruxHive</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none'><rect width='64' height='64' rx='12' fill='%230a0a0a'/><path d='M32 8 L55 19.5 L55 44.5 L32 56 L9 44.5 L9 19.5 Z' stroke='%23f5a524' stroke-width='3' stroke-linejoin='round'/><circle cx='32' cy='32' r='6' fill='%23f5a524'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-      background:#0f1117;color:#e2e8f0;min-height:100vh}
-    header{padding:1.25rem 2rem;border-bottom:1px solid #1e2636;
+    body{font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+      background:#0a0a0a;color:#e2e8f0;min-height:100vh}
+    header{padding:1.25rem 2rem;border-bottom:1px solid #1d1d1d;
       display:flex;align-items:center;gap:1rem}
     header h1{font-size:1.1rem;font-weight:700;color:#f8fafc;letter-spacing:-.02em}
-    header h1 span{color:#6366f1}
+    header h1 span{color:#f5a524}
     .stats{display:flex;gap:1.5rem;margin-left:auto;margin-right:1rem}
     .stat{font-size:.75rem;color:#94a3b8}
     .stat strong{color:#e2e8f0;font-size:.9rem;display:block}
-    nav.tabs{display:flex;gap:0;border-bottom:1px solid #1e2636;
-      padding:0 2rem;background:#0d1018}
+    nav.tabs{display:flex;gap:0;border-bottom:1px solid #1d1d1d;
+      padding:0 2rem;background:#0d0d0d}
     nav.tabs button{background:none;border:none;color:#64748b;
       padding:.85rem 1.25rem;font-size:.85rem;font-weight:500;cursor:pointer;
       border-bottom:2px solid transparent;transition:all .15s}
     nav.tabs button:hover{color:#e2e8f0}
-    nav.tabs button.active{color:#a78bfa;border-bottom-color:#6366f1}
+    nav.tabs button.active{color:#f5a524;border-bottom-color:#f5a524}
     main{max-width:960px;margin:2rem auto;padding:0 1.5rem}
     h2{font-size:.85rem;font-weight:600;text-transform:uppercase;
       letter-spacing:.06em;color:#64748b;margin-bottom:1rem}
     h3{font-size:.95rem;font-weight:600;color:#e2e8f0;margin:1.5rem 0 .5rem}
     .empty{padding:2rem;text-align:center;color:#64748b;
-      border:1px dashed #1e2636;border-radius:.5rem}
-    .card{background:#161c2d;border:1px solid #1e2636;border-radius:.5rem;
+      border:1px dashed #1d1d1d;border-radius:.5rem}
+    .card{background:#131313;border:1px solid #1d1d1d;border-radius:.5rem;
       padding:1.25rem;margin-bottom:.75rem}
     .card-header{display:flex;align-items:flex-start;gap:.75rem;margin-bottom:.5rem}
     .badge{font-size:.7rem;font-weight:600;padding:.2rem .5rem;border-radius:.25rem;
@@ -81,65 +85,65 @@ _HTML = """<!doctype html>
     .badge-constraint{background:#3b1414;color:#f87171}
     .badge-decision{background:#1e3b2d;color:#4ade80}
     .badge-pattern{background:#2d2b1e;color:#fbbf24}
-    .badge-plan{background:#2d1e3b;color:#c084fc}
+    .badge-plan{background:#2d1e3b;color:#f5a524}
     .badge-research{background:#1e2d3b;color:#38bdf8}
     .badge-outcome{background:#1e2e1e;color:#86efac}
-    .badge-other{background:#1e2636;color:#94a3b8}
-    .path{font-size:.78rem;color:#94a3b8;font-family:monospace;flex:1;
+    .badge-other{background:#1d1d1d;color:#94a3b8}
+    .path{font-size:.78rem;color:#94a3b8;font-family:"IBM Plex Mono","SF Mono",Menlo,monospace;flex:1;
       overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .meta{font-size:.75rem;color:#64748b;margin-bottom:.75rem}
     .preview{font-size:.8rem;color:#94a3b8;line-height:1.5;
-      background:#0f1117;border-left:2px solid #1e2636;
+      background:#0a0a0a;border-left:2px solid #1d1d1d;
       padding:.5rem .75rem;border-radius:0 .25rem .25rem 0;
       margin-bottom:.875rem;white-space:pre-wrap;max-height:120px;overflow:hidden}
     .conflict-box{background:#3b1414;border-left:2px solid #f87171;
       padding:.55rem .75rem;border-radius:0 .25rem .25rem 0;
       margin-bottom:.875rem;font-size:.78rem;color:#fca5a5}
     .conflict-box .conflict-title{font-weight:600;margin-bottom:.3rem;color:#fecaca}
-    .conflict-box .conflict-item{font-family:monospace;font-size:.72rem;
+    .conflict-box .conflict-item{font-family:"IBM Plex Mono","SF Mono",Menlo,monospace;font-size:.72rem;
       color:#fda4af;margin-top:.25rem;opacity:.85}
     .actions{display:flex;gap:.5rem}
     button{cursor:pointer;font-size:.78rem;font-weight:600;padding:.4rem .9rem;
       border-radius:.3rem;border:none;transition:opacity .15s}
-    .btn-approve{background:#22c55e;color:#0f1117}
-    .btn-reject{background:#1e2636;color:#94a3b8;border:1px solid #2d3748}
+    .btn-approve{background:#22c55e;color:#0a0a0a}
+    .btn-reject{background:#1d1d1d;color:#94a3b8;border:1px solid #2a2a2a}
     button:hover{opacity:.85}
     button:disabled{opacity:.4;cursor:not-allowed}
     .toast{position:fixed;bottom:1.5rem;right:1.5rem;padding:.75rem 1.25rem;
       border-radius:.4rem;font-size:.82rem;font-weight:600;opacity:0;
       transition:opacity .2s;pointer-events:none}
     .toast.show{opacity:1}
-    .toast-ok{background:#22c55e;color:#0f1117}
+    .toast-ok{background:#22c55e;color:#0a0a0a}
     .toast-err{background:#ef4444;color:#fff}
-    input.approver{background:#0f1117;border:1px solid #2d3748;color:#e2e8f0;
+    input.approver{background:#0a0a0a;border:1px solid #2a2a2a;color:#e2e8f0;
       padding:.35rem .65rem;border-radius:.3rem;font-size:.78rem;width:130px}
     .view{display:none}
     .view.active{display:block}
     .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.5rem}
-    .kpi{background:#161c2d;border:1px solid #1e2636;border-radius:.5rem;padding:1rem}
+    .kpi{background:#131313;border:1px solid #1d1d1d;border-radius:.5rem;padding:1rem}
     .kpi-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;
       color:#64748b;margin-bottom:.4rem}
     .kpi-value{font-size:1.5rem;font-weight:700;color:#e2e8f0}
     .kpi-sub{font-size:.7rem;color:#94a3b8;margin-top:.25rem}
     table{width:100%;border-collapse:collapse;font-size:.82rem}
-    table thead{background:#161c2d;color:#94a3b8;text-align:left}
-    table th, table td{padding:.65rem .85rem;border-bottom:1px solid #1e2636}
+    table thead{background:#131313;color:#94a3b8;text-align:left}
+    table th, table td{padding:.65rem .85rem;border-bottom:1px solid #1d1d1d}
     table th{font-weight:500;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em}
-    table tbody tr:hover{background:#161c2d}
+    table tbody tr:hover{background:#131313}
     .num{text-align:right;font-variant-numeric:tabular-nums}
     .pill{display:inline-block;font-size:.7rem;padding:.15rem .5rem;border-radius:1rem;
-      background:#1e2636;color:#94a3b8}
-    .gap-row{background:#161c2d;border:1px solid #1e2636;border-radius:.5rem;
+      background:#1d1d1d;color:#94a3b8}
+    .gap-row{background:#131313;border:1px solid #1d1d1d;border-radius:.5rem;
       padding:.75rem 1rem;margin-bottom:.4rem;display:flex;align-items:center;gap:.75rem}
-    .gap-q{flex:1;font-family:monospace;font-size:.82rem;color:#fbbf24}
-    .spark{font-family:monospace;letter-spacing:.05em;color:#a78bfa;font-size:1.1rem}
+    .gap-q{flex:1;font-family:"IBM Plex Mono","SF Mono",Menlo,monospace;font-size:.82rem;color:#fbbf24}
+    .spark{font-family:"IBM Plex Mono","SF Mono",Menlo,monospace;letter-spacing:.05em;color:#f5a524;font-size:1.1rem}
     .filter-bar{display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;
       font-size:.8rem;color:#94a3b8}
-    select{background:#0f1117;border:1px solid #2d3748;color:#e2e8f0;
+    select{background:#0a0a0a;border:1px solid #2a2a2a;color:#e2e8f0;
       padding:.35rem .65rem;border-radius:.3rem;font-size:.78rem}
-    .kpi-strip{display:flex;gap:.4rem;padding:.5rem 2rem;background:#0d1018;
-      border-bottom:1px solid #1e2636;overflow-x:auto}
-    .kpi-chip{flex:0 0 auto;background:#161c2d;border:1px solid #1e2636;
+    .kpi-strip{display:flex;gap:.4rem;padding:.5rem 2rem;background:#0d0d0d;
+      border-bottom:1px solid #1d1d1d;overflow-x:auto}
+    .kpi-chip{flex:0 0 auto;background:#131313;border:1px solid #1d1d1d;
       border-radius:.4rem;padding:.4rem .75rem;font-size:.72rem;color:#94a3b8;
       display:flex;flex-direction:column;line-height:1.2}
     .kpi-chip strong{font-size:.95rem;font-weight:700;color:#e2e8f0}
@@ -151,7 +155,7 @@ _HTML = """<!doctype html>
     [data-tip]{position:relative}
     [data-tip]:hover::after{
       content:attr(data-tip);position:absolute;left:50%;top:100%;transform:translateX(-50%);
-      margin-top:.4rem;background:#0d1018;border:1px solid #2d3748;
+      margin-top:.4rem;background:#0d0d0d;border:1px solid #2a2a2a;
       border-radius:.35rem;padding:.55rem .75rem;font-size:.72rem;
       font-weight:400;color:#cbd5e1;line-height:1.4;
       white-space:pre-wrap;width:260px;text-align:left;z-index:100;
@@ -159,17 +163,31 @@ _HTML = """<!doctype html>
       pointer-events:none}
     [data-tip]:hover::before{
       content:'';position:absolute;left:50%;top:100%;transform:translateX(-50%);
-      margin-top:.05rem;border:5px solid transparent;border-bottom-color:#2d3748;
+      margin-top:.05rem;border:5px solid transparent;border-bottom-color:#2a2a2a;
       z-index:101;pointer-events:none}
   </style>
 </head>
 <body>
 <header>
-  <h1>Crux<span>Hive</span></h1>
+  <a href="/" style="display:flex;align-items:center;gap:.5rem;text-decoration:none">
+    <svg viewBox="0 0 64 64" width="22" height="22" fill="none" style="color:#f5a524">
+      <path d="M32 4 L57 18.5 L57 45.5 L32 60 L7 45.5 L7 18.5 Z" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45">
+        <line x1="32" y1="32" x2="32" y2="15"/><line x1="32" y1="32" x2="47" y2="23"/>
+        <line x1="32" y1="32" x2="47" y2="41"/><line x1="32" y1="32" x2="32" y2="49"/>
+        <line x1="32" y1="32" x2="17" y2="41"/><line x1="32" y1="32" x2="17" y2="23"/>
+      </g>
+      <circle cx="32" cy="15" r="2.5" fill="currentColor"/><circle cx="47" cy="23" r="2.5" fill="currentColor"/>
+      <circle cx="47" cy="41" r="2.5" fill="currentColor"/><circle cx="32" cy="49" r="2.5" fill="currentColor"/>
+      <circle cx="17" cy="41" r="2.5" fill="currentColor"/><circle cx="17" cy="23" r="2.5" fill="currentColor"/>
+      <circle cx="32" cy="32" r="4.5" fill="currentColor"/>
+    </svg>
+    <h1>crux<span>hive</span></h1>
+  </a>
   <div class="stats" id="stats"></div>
   <a href="/docs" target="_blank" rel="noopener" title="Open the CruxHive guide in a new tab"
      style="color:#94a3b8;font-size:.78rem;text-decoration:none;
-            padding:.35rem .7rem;border:1px solid #2d3748;border-radius:.3rem">Docs ↗</a>
+            padding:.35rem .7rem;border:1px solid #2a2a2a;border-radius:.3rem">Docs ↗</a>
 </header>
 <div class="kpi-strip" id="kpi-strip"></div>
 <nav class="tabs">
@@ -646,47 +664,51 @@ _WORKSPACE_HTML = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CruxHive · Workspace</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none'><rect width='64' height='64' rx='12' fill='%230a0a0a'/><path d='M32 8 L55 19.5 L55 44.5 L32 56 L9 44.5 L9 19.5 Z' stroke='%23f5a524' stroke-width='3' stroke-linejoin='round'/><circle cx='32' cy='32' r='6' fill='%23f5a524'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  background:#0f1117;color:#e2e8f0;min-height:100vh}
-header{padding:1.25rem 2rem;border-bottom:1px solid #1e2636;
+body{font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+  background:#0a0a0a;color:#e2e8f0;min-height:100vh}
+header{padding:1.25rem 2rem;border-bottom:1px solid #1d1d1d;
   display:flex;align-items:center;gap:1rem;position:sticky;top:0;
-  background:#0f1117ee;backdrop-filter:blur(8px);z-index:10}
+  background:#0a0a0aee;backdrop-filter:blur(8px);z-index:10}
 header h1{font-size:1.1rem;font-weight:700;color:#f8fafc;letter-spacing:-.02em}
-header h1 span{color:#6366f1}
-header .mode{font-size:.7rem;color:#a78bfa;
-  background:#2e1065;border:1px solid #7c3aed44;padding:.25rem .65rem;border-radius:1rem}
+header h1 span{color:#f5a524}
+header .mode{font-size:.7rem;color:#f5a524;
+  background:#3d2710;border:1px solid #f5a52444;padding:.25rem .65rem;border-radius:1rem}
 header .filler{flex:1}
-header select{background:#0f1117;border:1px solid #2d3748;color:#e2e8f0;
+header select{background:#0a0a0a;border:1px solid #2a2a2a;color:#e2e8f0;
   padding:.4rem .65rem;border-radius:.3rem;font-size:.78rem;cursor:pointer}
 header a.docs-link{color:#94a3b8;font-size:.78rem;text-decoration:none;
-  padding:.4rem .75rem;border:1px solid #2d3748;border-radius:.3rem;
+  padding:.4rem .75rem;border:1px solid #2a2a2a;border-radius:.3rem;
   transition:all .15s}
-header a.docs-link:hover{color:#e2e8f0;border-color:#475569;background:#161c2d}
+header a.docs-link:hover{color:#e2e8f0;border-color:#475569;background:#131313}
 main{max-width:1180px;margin:1.5rem auto;padding:0 1.5rem}
 h2{font-size:.78rem;font-weight:600;text-transform:uppercase;
   letter-spacing:.06em;color:#64748b;margin:1.5rem 0 .75rem;
   display:flex;align-items:center;gap:.5rem}
 h2 .count{font-size:.7rem;color:#475569;font-weight:400;
-  background:#1e2636;padding:.1rem .5rem;border-radius:.75rem}
+  background:#1d1d1d;padding:.1rem .5rem;border-radius:.75rem}
 
 /* ── Empty state callout ───────────────────────────────────────── */
-.callout{background:linear-gradient(135deg,#1e1b3a 0%,#13172a 100%);
+.callout{background:linear-gradient(135deg,#1a1410 0%,#0a0a0a 100%);
   border:1px solid #4338ca44;border-radius:.6rem;padding:1.4rem 1.6rem;
   margin-bottom:1.5rem}
 .callout h3{font-size:1rem;color:#e2e8f0;margin-bottom:.5rem;font-weight:600}
 .callout p{font-size:.85rem;color:#94a3b8;line-height:1.55;margin-bottom:.6rem}
-.callout code{background:#0f1117;color:#a78bfa;padding:.1rem .4rem;
-  border-radius:.25rem;font-size:.78rem;font-family:'SF Mono',monospace}
+.callout code{background:#0a0a0a;color:#f5a524;padding:.1rem .4rem;
+  border-radius:.25rem;font-size:.78rem;font-family:'IBM Plex Mono','SF Mono',Menlo,monospace}
 .callout .actions{margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap}
-.callout .pill{background:#1e2636;border:1px solid #2d3748;color:#cbd5e1;
+.callout .pill{background:#1d1d1d;border:1px solid #2a2a2a;color:#cbd5e1;
   padding:.35rem .7rem;border-radius:.3rem;font-size:.75rem;
-  font-family:'SF Mono',monospace}
+  font-family:'IBM Plex Mono','SF Mono',Menlo,monospace}
 
 /* ── KPI strip (aggregate) ─────────────────────────────────────── */
 .kpi-row{display:grid;grid-template-columns:repeat(7,1fr);gap:.5rem;margin-bottom:1.25rem}
-.kpi{background:#161c2d;border:1px solid #1e2636;border-radius:.45rem;
+.kpi{background:#131313;border:1px solid #1d1d1d;border-radius:.45rem;
   padding:.75rem .9rem;display:flex;flex-direction:column;line-height:1.2}
 .kpi-label{font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;
   color:#64748b;margin-bottom:.3rem;font-weight:600}
@@ -703,7 +725,7 @@ h2 .count{font-size:.7rem;color:#475569;font-weight:400;
 [data-tip]:hover::after{
   content:attr(data-tip);
   position:absolute;left:50%;top:100%;transform:translateX(-50%);
-  margin-top:.4rem;background:#0d1018;border:1px solid #2d3748;
+  margin-top:.4rem;background:#0d0d0d;border:1px solid #2a2a2a;
   border-radius:.35rem;padding:.55rem .75rem;font-size:.72rem;
   font-weight:400;color:#cbd5e1;line-height:1.4;
   white-space:pre-wrap;width:260px;text-align:left;z-index:100;
@@ -711,7 +733,7 @@ h2 .count{font-size:.7rem;color:#475569;font-weight:400;
   pointer-events:none}
 [data-tip]:hover::before{
   content:'';position:absolute;left:50%;top:100%;transform:translateX(-50%);
-  margin-top:.05rem;border:5px solid transparent;border-bottom-color:#2d3748;
+  margin-top:.05rem;border:5px solid transparent;border-bottom-color:#2a2a2a;
   z-index:101;pointer-events:none}
 .kpi-delta{font-size:.65rem;font-weight:600;margin-left:.3rem}
 .kpi-delta.up{color:#86efac}
@@ -719,12 +741,12 @@ h2 .count{font-size:.7rem;color:#475569;font-weight:400;
 .kpi-delta.flat{color:#475569}
 
 /* ── Gaps panel ────────────────────────────────────────────────── */
-.gaps-panel{background:#161c2d;border:1px solid #1e2636;border-radius:.5rem;
+.gaps-panel{background:#131313;border:1px solid #1d1d1d;border-radius:.5rem;
   padding:1rem 1.2rem;margin-bottom:1.25rem}
 .gap-row{display:flex;align-items:center;gap:.6rem;padding:.4rem 0;
-  border-bottom:1px solid #1e2636;font-size:.8rem}
+  border-bottom:1px solid #1d1d1d;font-size:.8rem}
 .gap-row:last-child{border-bottom:none}
-.gap-row .q{flex:1;font-family:'SF Mono',monospace;color:#fbbf24;
+.gap-row .q{flex:1;font-family:'IBM Plex Mono','SF Mono',Menlo,monospace;color:#fbbf24;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gap-row .meta{color:#64748b;font-size:.7rem}
 .gap-empty{color:#64748b;font-size:.8rem;text-align:center;padding:.5rem 0}
@@ -732,19 +754,19 @@ h2 .count{font-size:.7rem;color:#475569;font-weight:400;
 /* ── Project cards ─────────────────────────────────────────────── */
 .project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));
   gap:.7rem;margin-bottom:1rem}
-.project-card{background:#161c2d;border:1px solid #1e2636;border-radius:.5rem;
+.project-card{background:#131313;border:1px solid #1d1d1d;border-radius:.5rem;
   padding:.9rem 1rem;cursor:pointer;transition:all .15s;text-align:left;
   font-family:inherit;color:inherit;display:flex;flex-direction:column;gap:.45rem;
   width:100%}
-.project-card:hover{border-color:#6366f1;background:#1a2138;transform:translateY(-1px)}
-.project-card.active{border-left:3px solid #a78bfa;padding-left:.85rem}
+.project-card:hover{border-color:#f5a524;background:#1a2138;transform:translateY(-1px)}
+.project-card.active{border-left:3px solid #f5a524;padding-left:.85rem}
 .project-card-header{display:flex;align-items:baseline;justify-content:space-between;
   gap:.5rem}
 .project-name{font-size:1.05rem;font-weight:700;color:#f8fafc;letter-spacing:-.01em}
 .project-badge{font-size:.62rem;text-transform:uppercase;letter-spacing:.05em;
   padding:.15rem .45rem;border-radius:.25rem;font-weight:600}
 .project-badge.active{background:#1e3a5f;color:#60a5fa}
-.project-badge.quiet{background:#1e2636;color:#64748b}
+.project-badge.quiet{background:#1d1d1d;color:#64748b}
 .project-stats{display:grid;grid-template-columns:repeat(auto-fit, minmax(60px, 1fr));gap:.5rem;margin-top:.2rem}
 .project-stat{display:flex;flex-direction:column;gap:.15rem}
 .project-stat-label{font-size:.62rem;color:#64748b;text-transform:uppercase;
@@ -757,7 +779,7 @@ h2 .count{font-size:.7rem;color:#475569;font-weight:400;
 
 /* ── Collapsed (quiet) cards ───────────────────────────────────── */
 .quiet-section{margin-top:.5rem}
-.quiet-toggle{background:none;border:1px dashed #1e2636;color:#94a3b8;
+.quiet-toggle{background:none;border:1px dashed #1d1d1d;color:#94a3b8;
   font-size:.78rem;padding:.5rem 1rem;border-radius:.4rem;cursor:pointer;
   width:100%;text-align:left;font-family:inherit;
   display:flex;align-items:center;justify-content:space-between}
@@ -772,35 +794,49 @@ h2 .count{font-size:.7rem;color:#475569;font-weight:400;
 .drawer-overlay{position:fixed;inset:0;background:#000c;z-index:50;
   display:none;align-items:center;justify-content:center;padding:2rem}
 .drawer-overlay.open{display:flex}
-.drawer{background:#0f1117;border:1px solid #2d3748;border-radius:.6rem;
+.drawer{background:#0a0a0a;border:1px solid #2a2a2a;border-radius:.6rem;
   width:100%;max-width:680px;max-height:88vh;overflow:hidden;
   display:flex;flex-direction:column}
-.drawer-header{padding:1.1rem 1.4rem;border-bottom:1px solid #1e2636;
+.drawer-header{padding:1.1rem 1.4rem;border-bottom:1px solid #1d1d1d;
   display:flex;align-items:center;gap:1rem}
 .drawer-header h3{font-size:1.05rem;font-weight:700;color:#f8fafc}
 .drawer-header .close{margin-left:auto;background:none;border:none;color:#94a3b8;
   font-size:1.3rem;cursor:pointer;line-height:1;padding:.25rem .5rem;border-radius:.3rem}
-.drawer-header .close:hover{background:#1e2636;color:#f8fafc}
+.drawer-header .close:hover{background:#1d1d1d;color:#f8fafc}
 .drawer-body{padding:1rem 1.4rem;overflow-y:auto;font-size:.85rem;color:#cbd5e1}
 .drawer-section{margin-bottom:1.25rem}
 .drawer-section h4{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;
   color:#64748b;font-weight:600;margin-bottom:.5rem}
-.drawer-path{font-family:'SF Mono',monospace;font-size:.72rem;color:#475569;
+.drawer-path{font-family:'IBM Plex Mono','SF Mono',Menlo,monospace;font-size:.72rem;color:#475569;
   word-break:break-all;margin-top:.25rem}
-.drawer-cmd{background:#161c2d;border:1px solid #1e2636;border-radius:.35rem;
-  padding:.55rem .8rem;font-family:'SF Mono',monospace;font-size:.78rem;
-  color:#a78bfa;margin-top:.4rem}
-.drawer-list li{padding:.3rem 0;border-bottom:1px solid #1e2636;
+.drawer-cmd{background:#131313;border:1px solid #1d1d1d;border-radius:.35rem;
+  padding:.55rem .8rem;font-family:'IBM Plex Mono','SF Mono',Menlo,monospace;font-size:.78rem;
+  color:#f5a524;margin-top:.4rem}
+.drawer-list li{padding:.3rem 0;border-bottom:1px solid #1d1d1d;
   display:flex;justify-content:space-between;gap:.5rem;font-size:.78rem}
 .drawer-list li:last-child{border-bottom:none}
-.drawer-list code{font-family:'SF Mono',monospace;color:#94a3b8;font-size:.72rem}
-.kbd{font-family:'SF Mono',monospace;font-size:.7rem;color:#cbd5e1;
-  background:#1e2636;border:1px solid #2d3748;padding:.05rem .3rem;border-radius:.2rem}
+.drawer-list code{font-family:'IBM Plex Mono','SF Mono',Menlo,monospace;color:#94a3b8;font-size:.72rem}
+.kbd{font-family:'IBM Plex Mono','SF Mono',Menlo,monospace;font-size:.7rem;color:#cbd5e1;
+  background:#1d1d1d;border:1px solid #2a2a2a;padding:.05rem .3rem;border-radius:.2rem}
 </style>
 </head>
 <body>
 <header>
-  <h1>Crux<span>Hive</span></h1>
+  <a href="/" style="display:flex;align-items:center;gap:.5rem;text-decoration:none">
+    <svg viewBox="0 0 64 64" width="22" height="22" fill="none" style="color:#f5a524">
+      <path d="M32 4 L57 18.5 L57 45.5 L32 60 L7 45.5 L7 18.5 Z" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/>
+      <g stroke="currentColor" stroke-width="1" opacity="0.45">
+        <line x1="32" y1="32" x2="32" y2="15"/><line x1="32" y1="32" x2="47" y2="23"/>
+        <line x1="32" y1="32" x2="47" y2="41"/><line x1="32" y1="32" x2="32" y2="49"/>
+        <line x1="32" y1="32" x2="17" y2="41"/><line x1="32" y1="32" x2="17" y2="23"/>
+      </g>
+      <circle cx="32" cy="15" r="2.5" fill="currentColor"/><circle cx="47" cy="23" r="2.5" fill="currentColor"/>
+      <circle cx="47" cy="41" r="2.5" fill="currentColor"/><circle cx="32" cy="49" r="2.5" fill="currentColor"/>
+      <circle cx="17" cy="41" r="2.5" fill="currentColor"/><circle cx="17" cy="23" r="2.5" fill="currentColor"/>
+      <circle cx="32" cy="32" r="4.5" fill="currentColor"/>
+    </svg>
+    <h1>crux<span>hive</span></h1>
+  </a>
   <span class="mode">Workspace</span>
   <span class="filler"></span>
   <a class="docs-link" href="/docs" target="_blank" rel="noopener" title="Open the CruxHive guide in a new tab">Docs ↗</a>
