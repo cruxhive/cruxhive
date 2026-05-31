@@ -229,6 +229,40 @@
       margin-top:.4rem;letter-spacing:0;
     }
 
+    /* ── Why CruxHive (comparison) ───────────────────────────────── */
+    .why{padding:6rem 0;border-bottom:1px solid var(--line)}
+    .why-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-top:.5rem}
+    .compare{
+      background:var(--bg-card);border:1px solid var(--line);border-radius:10px;
+      padding:1.6rem 1.7rem;display:flex;flex-direction:column;gap:.9rem;
+      transition:border-color .15s ease;
+    }
+    .compare:hover{border-color:var(--fg-mute)}
+    .compare .vs{
+      font-family:var(--mono);font-size:.68rem;color:var(--fg-mute);
+      text-transform:uppercase;letter-spacing:.08em;
+    }
+    .compare .pull{
+      font-size:1.25rem;font-weight:600;line-height:1.2;letter-spacing:-.02em;
+      color:var(--fg);
+    }
+    .compare .pull em{color:var(--accent);font-style:normal}
+    .compare p{color:var(--fg-dim);font-size:.9rem;line-height:1.6;margin:0}
+    .compare p code{font-family:var(--mono);font-size:.85em;color:var(--accent);
+      background:var(--bg);padding:.05rem .3rem;border-radius:4px}
+    .compare .keep{
+      font-family:var(--mono);font-size:.72rem;color:var(--fg-mute);
+      padding-top:.7rem;border-top:1px dashed var(--line);margin-top:.2rem;
+      letter-spacing:0;line-height:1.55;
+    }
+    .compare .keep b{color:var(--fg);font-weight:500}
+    .why-foot{
+      max-width:760px;margin:2.5rem auto 0;text-align:center;
+      font-size:1.05rem;color:var(--fg);line-height:1.5;
+      letter-spacing:-.01em;
+    }
+    .why-foot em{color:var(--accent);font-style:normal;font-weight:600}
+
     /* ── Install section ─────────────────────────────────────────── */
     .install-section{padding:6rem 0;border-bottom:1px solid var(--line);text-align:center}
     .install-section h2{
@@ -332,9 +366,11 @@
       .kpi:nth-child(2){border-right:none}
       .kpi:nth-child(1),.kpi:nth-child(2){border-bottom:1px solid var(--line)}
       .install-grid{grid-template-columns:1fr}
+      .why-grid{grid-template-columns:1fr}
       .signal{padding:4rem 0}
       .install-section{padding:4rem 0}
       .story{padding:4rem 0}
+      .why{padding:4rem 0}
     }
   </style>
 </head>
@@ -361,6 +397,7 @@
     </a>
     <div class="links">
       <a href="#how">How it works</a>
+      <a href="#why">Why</a>
       <a href="guide.html">Docs</a>
       <a href="https://github.com/cruxhive/cruxhive">GitHub</a>
       <a href="#install" class="install">Install</a>
@@ -638,6 +675,66 @@
   </div>
 </section>
 
+<!-- ─── WHY CRUXHIVE (mental model / differentiation) ──────────── -->
+<section id="why" class="why">
+  <div class="container">
+    <div class="signal-head">
+      <span class="num">05 / Why CruxHive</span>
+      <h2>Two real questions answered.</h2>
+      <span class="rule"></span>
+    </div>
+
+    <div class="why-grid">
+      <!-- vs CLAUDE.md / AGENTS.md / .cursorrules -->
+      <div class="compare">
+        <span class="vs">vs. just using CLAUDE.md</span>
+        <div class="pull">A file is fine.<br/><em>A system compounds.</em></div>
+        <p>
+          One <code>CLAUDE.md</code> works great while you use one AI tool.
+          The moment you also open Cursor or OpenCode, your context fragments —
+          three files, three subtly different versions, immediate drift.
+        </p>
+        <p>
+          CruxHive symlinks five AI tools at one canonical
+          <code>.llm/CONTEXT.md</code> and adds search, decay, cross-project
+          retrieval, and a per-AI-tool observability log. Plain markdown files
+          stay your source of truth; CruxHive is the layer around them.
+        </p>
+        <div class="keep">
+          <b>Stay on CLAUDE.md if:</b> you only use one AI tool, one project,
+          and your context fits in 200 lines.
+        </div>
+      </div>
+
+      <!-- vs Mem0 / Zep / Letta / autonomous memory -->
+      <div class="compare">
+        <span class="vs">vs. Mem0 / Zep / autonomous memory</span>
+        <div class="pull">Mem0 auto-writes.<br/><em>CruxHive auto-suggests.</em></div>
+        <p>
+          Autonomous-memory tools extract and commit memory without asking.
+          That is the right model for chatbots and personal AI agents.
+        </p>
+        <p>
+          CruxHive is for code projects, where you want every entry that becomes
+          team knowledge to be reviewed first. The AI proposes via
+          <code>/extract</code>; you approve via <code>cruxhive review</code> (or
+          <code>cruxhive solo</code> auto-approves your own). The approval gate
+          IS the product — hallucinations and drift never reach the shared base.
+        </p>
+        <div class="keep">
+          <b>Stay on Mem0 / Zep if:</b> you're building a chatbot, not curating
+          a code project's memory.
+        </div>
+      </div>
+    </div>
+
+    <p class="why-foot">
+      One sentence: <em>CruxHive is what you reach for when AI memory needs to
+      be governed, searchable, multi-tool, and local.</em>
+    </p>
+  </div>
+</section>
+
 <!-- ─── INSTALL ─────────────────────────────────────────────────── -->
 <section id="install" class="install-section">
   <div class="container">
@@ -648,13 +745,13 @@
       <a class="install-card" href="https://www.npmjs.com/package/@cruxhive/cli">
         <div class="label">RECOMMENDED · npm</div>
         <div class="pkg">@cruxhive/cli</div>
-        <p class="desc">Bootstraps everything. Installs the Python MCP server, wires 5 AI tools, sets up hooks, gitignore. Stable 0.12.</p>
+        <p class="desc">Bootstraps everything. Installs the Python MCP server, wires 5 AI tools, sets up hooks &amp; gitignore.</p>
         <div class="cmd"><span class="prompt">$</span> npm install -g @cruxhive/cli</div>
       </a>
       <a class="install-card" href="https://pypi.org/project/cruxhive-mcp/">
         <div class="label">DIRECT · PyPI</div>
         <div class="pkg">cruxhive-mcp</div>
-        <p class="desc">Just the MCP server. Point your AI tool's <code>.mcp.json</code> at <code>cruxhive-mcp</code>. Stable 0.12.</p>
+        <p class="desc">Just the MCP server. Point your AI tool's <code>.mcp.json</code> at <code>cruxhive-mcp</code>.</p>
         <div class="cmd"><span class="prompt">$</span> uv tool install cruxhive-mcp</div>
       </a>
     </div>
