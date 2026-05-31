@@ -11,6 +11,12 @@
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://cruxhive.com" />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
+  <!-- Plausible analytics — self-hosted at plausible.mozbridge.com -->
+  <script defer data-domain="cruxhive.com"
+          src="https://plausible.mozbridge.com/js/script.outbound-links.tagged-events.js"></script>
+  <script>window.plausible = window.plausible || function() { (window.plausible.q = window.plausible.q || []).push(arguments) }</script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -426,11 +432,11 @@
         <span class="copy-block">
           <span class="prompt">$</span>
           <span class="cmd">npm install -g @cruxhive/cli</span>
-          <button class="copy-btn" onclick="navigator.clipboard.writeText('npm install -g @cruxhive/cli')" aria-label="Copy">
+          <button class="copy-btn plausible-event-name=install_copy" onclick="navigator.clipboard.writeText('npm install -g @cruxhive/cli')" aria-label="Copy">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
           </button>
         </span>
-        <a class="ghost-link" href="guide.html">Read the docs →</a>
+        <a class="ghost-link plausible-event-name=hero_docs_click" href="guide.html">Read the docs →</a>
       </div>
     </div>
 
@@ -742,13 +748,13 @@
     <p class="sub">Two packages. Both public. MIT. Choose either.</p>
 
     <div class="install-grid">
-      <a class="install-card" href="https://www.npmjs.com/package/@cruxhive/cli">
+      <a class="install-card plausible-event-name=install_npm_click" href="https://www.npmjs.com/package/@cruxhive/cli">
         <div class="label">RECOMMENDED · npm</div>
         <div class="pkg">@cruxhive/cli</div>
         <p class="desc">Bootstraps everything. Installs the Python MCP server, wires 5 AI tools, sets up hooks &amp; gitignore.</p>
         <div class="cmd"><span class="prompt">$</span> npm install -g @cruxhive/cli</div>
       </a>
-      <a class="install-card" href="https://pypi.org/project/cruxhive-mcp/">
+      <a class="install-card plausible-event-name=install_pypi_click" href="https://pypi.org/project/cruxhive-mcp/">
         <div class="label">DIRECT · PyPI</div>
         <div class="pkg">cruxhive-mcp</div>
         <p class="desc">Just the MCP server. Point your AI tool's <code>.mcp.json</code> at <code>cruxhive-mcp</code>.</p>
@@ -806,9 +812,9 @@
 
       <div class="next-cta">
         <span>Stuck or want detail?</span>
-        <a href="guide.html#workflow">Daily workflow →</a>
-        <a href="guide.html#cli">Full CLI reference →</a>
-        <a href="guide.html">All docs →</a>
+        <a href="guide.html#workflow" class="plausible-event-name=firstday_workflow_click">Daily workflow →</a>
+        <a href="guide.html#cli" class="plausible-event-name=firstday_cli_click">Full CLI reference →</a>
+        <a href="guide.html" class="plausible-event-name=firstday_docs_click">All docs →</a>
         <span style="margin-left:auto">Verify setup: <code style="color:var(--fg)">cruxhive doctor</code></span>
       </div>
     </div>
