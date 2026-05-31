@@ -97,7 +97,7 @@
     <div class="max-w-4xl mx-auto text-center">
       <div class="inline-flex items-center gap-2 text-xs text-violet-400 bg-violet-500/10 border border-violet-500/20 rounded-full px-3 py-1 mb-8">
         <span class="pulse-slow w-1.5 h-1.5 bg-violet-400 rounded-full"></span>
-        v0.10 published on PyPI &amp; npm · MIT · local-first · Star for updates
+        Published · MIT · local-first · v0.11 on PyPI · v0.12 on npm
       </div>
 
       <h1 class="text-5xl sm:text-6xl font-bold tracking-tight mb-6 leading-tight">
@@ -231,11 +231,11 @@
               <h3 class="font-semibold mb-1">Init</h3>
               <p class="text-sm text-zinc-400 mb-3">One command bootstraps your knowledge layer. CruxHive detects your AI tools and wires itself in automatically.</p>
               <div class="code-block rounded-md px-4 py-2 font-mono text-xs text-zinc-400">
-                <span class="text-zinc-600">$</span> npx cruxhive init<br/>
-                <span class="text-green-400">✓</span> Detected: Claude Code, Cursor<br/>
-                <span class="text-green-400">✓</span> Created .llm/ structure<br/>
-                <span class="text-green-400">✓</span> Registered MCP server<br/>
-                <span class="text-green-400">✓</span> Pulled 12 org entries
+                <span class="text-zinc-600">$</span> cruxhive init<br/>
+                <span class="text-green-400">✓</span> Wired: Claude Code, OpenCode, Cursor, Windsurf, Gemini<br/>
+                <span class="text-green-400">✓</span> Created .llm/ structure + .gitignore<br/>
+                <span class="text-green-400">✓</span> Installed MCP server + 6 slash commands<br/>
+                <span class="text-green-400">✓</span> SessionStart hook + git post-commit auto-index
               </div>
             </div>
           </div>
@@ -302,7 +302,7 @@
             <p>  - cursor</p>
             <p><span class="text-violet-400">storage</span>: simple   <span class="text-zinc-700"># simple | graph | cloud</span></p>
             <p class="mt-4 text-zinc-600"># Commit this file. Every new team member</p>
-            <p class="text-zinc-600"># runs npx cruxhive init and gets everything.</p>
+            <p class="text-zinc-600"># runs cruxhive init and gets everything.</p>
           </div>
           <div class="border-t border-zinc-800 p-4">
             <p class="text-xs text-zinc-600 font-mono mb-3">.llm/memory/constraints/</p>
@@ -559,11 +559,12 @@
       <div class="grid sm:grid-cols-3 gap-6">
         <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-6">
           <p class="text-xs text-violet-400 font-mono mb-3">SOLO DEVELOPER</p>
-          <p class="text-xs text-zinc-500 mb-4">Zero to first entry in under 3 minutes.</p>
+          <p class="text-xs text-zinc-500 mb-4">Solo mode = no approval queue. Auto-approve your own captures.</p>
           <div class="code-block rounded-lg px-4 py-3 font-mono text-xs text-zinc-400 space-y-1">
             <p><span class="text-zinc-600">$</span> npm install -g @cruxhive/cli</p>
             <p><span class="text-zinc-600">$</span> cruxhive init</p>
-            <p><span class="text-zinc-600">$</span> cruxhive ui</p>
+            <p><span class="text-zinc-600">$</span> cruxhive solo</p>
+            <p><span class="text-zinc-600">$</span> cruxhive doctor   <span class="text-zinc-600"># verify</span></p>
           </div>
         </div>
         <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-6">
@@ -577,12 +578,11 @@
         </div>
         <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-6">
           <p class="text-xs text-violet-400 font-mono mb-3">MULTI-PROJECT VIEW</p>
-          <p class="text-xs text-zinc-500 mb-4">Cross-project rollup with KPIs, sessions, gaps.</p>
+          <p class="text-xs text-zinc-500 mb-4">Cross-project rollup with KPIs, search, gaps.</p>
           <div class="code-block rounded-lg px-4 py-3 font-mono text-xs text-zinc-400 space-y-1">
             <p><span class="text-zinc-600">$</span> cruxhive ui --workspace</p>
+            <p><span class="text-zinc-600">$</span> cruxhive search --workspace <span class="text-violet-300">"auth"</span></p>
             <p><span class="text-zinc-600">$</span> cruxhive digest --compare</p>
-            <p><span class="text-zinc-600">$</span> cruxhive push</p>
-            <p class="text-zinc-600"># commit cruxhive.config.yaml</p>
           </div>
         </div>
       </div>
@@ -642,85 +642,85 @@
       </div>
 
       <div class="grid sm:grid-cols-2 gap-6 mb-12">
-        <!-- Coming soon: npm -->
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-6">
-          <div class="flex items-center gap-2 mb-1">
-            <span class="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full font-mono">coming soon</span>
-          </div>
-          <h3 class="font-semibold text-lg mb-2">npm install</h3>
-          <p class="text-sm text-zinc-500 mb-4">One-command setup. Detects your AI tools, wires the MCP server, creates your <code class="text-xs bg-zinc-800 px-1 rounded">.llm/</code> structure. Package in final testing.</p>
-          <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-500 space-y-1 opacity-60 select-none">
-            <p><span class="text-zinc-700">$</span> npx cruxhive init</p>
-            <p class="text-zinc-700 text-xs mt-1">→ releasing with Phase 3</p>
-          </div>
-          <div class="mt-4">
-            <a href="https://github.com/cruxhive/cruxhive" class="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-              Star to get notified →
-            </a>
-          </div>
-        </div>
-
-        <!-- Available now: early access via MCP -->
+        <!-- npm — primary install path -->
         <div class="gradient-border rounded-xl p-6">
           <div class="flex items-center gap-2 mb-1">
             <span class="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-mono">available now</span>
+            <a href="https://www.npmjs.com/package/@cruxhive/cli" class="text-xs text-zinc-500 hover:text-zinc-300 ml-auto">@cruxhive/cli ↗</a>
           </div>
-          <h3 class="font-semibold text-lg mb-2">Early adopter (manual)</h3>
-          <p class="text-sm text-zinc-500 mb-4">The MCP context tools are live today inside the Mozbridge repo. Wire them into Claude Code or any MCP client in 3 steps.</p>
+          <h3 class="font-semibold text-lg mb-2">npm install (recommended)</h3>
+          <p class="text-sm text-zinc-500 mb-4">One-command setup. Wires 5 AI tools, registers MCP, creates <code class="text-xs bg-zinc-800 px-1 rounded">.llm/</code>, installs hooks, syncs <code class="text-xs bg-zinc-800 px-1 rounded">.gitignore</code>. Python server installed automatically via <code class="text-xs bg-zinc-800 px-1 rounded">uv</code> or <code class="text-xs bg-zinc-800 px-1 rounded">pip</code>.</p>
           <div class="code-block rounded-lg px-4 py-3 font-mono text-xs text-zinc-400 space-y-1">
-            <p class="text-zinc-600"># 1. Clone the repo</p>
-            <p><span class="text-zinc-600">$</span> git clone https://github.com/cruxhive/cruxhive</p>
-            <p class="mt-2 text-zinc-600"># 2. Add to .mcp.json</p>
-            <p><span class="text-zinc-300">"cruxhive"</span>: {</p>
-            <p>  <span class="text-violet-400">"command"</span>: <span class="text-green-300">"uvx"</span>,</p>
-            <p>  <span class="text-violet-400">"args"</span>: [<span class="text-green-300">"--from"</span>, <span class="text-green-300">"./mcp"</span>, <span class="text-green-300">"mozbridge-mcp"</span>]</p>
-            <p>}</p>
-            <p class="mt-2 text-zinc-600"># 3. Reload your AI tool — done</p>
-            <p class="text-green-400">✓ context_radar, context_next_slice, context_write_plan</p>
+            <p><span class="text-zinc-600">$</span> npm install -g @cruxhive/cli</p>
+            <p><span class="text-zinc-600">$</span> cd your-project</p>
+            <p><span class="text-zinc-600">$</span> cruxhive init</p>
+            <p><span class="text-zinc-600">$</span> cruxhive solo   <span class="text-zinc-600"># single-dev mode</span></p>
+            <p class="text-green-400">✓ ready · run `cruxhive ui` for dashboard</p>
+          </div>
+        </div>
+
+        <!-- pip / uv — direct install -->
+        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-6">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-mono">available now</span>
+            <a href="https://pypi.org/project/cruxhive-mcp/" class="text-xs text-zinc-500 hover:text-zinc-300 ml-auto">cruxhive-mcp ↗</a>
+          </div>
+          <h3 class="font-semibold text-lg mb-2">Python-only (for AI tool config)</h3>
+          <p class="text-sm text-zinc-500 mb-4">Just want the MCP server? Skip the npm CLI. Install with <code class="text-xs bg-zinc-800 px-1 rounded">uv</code> (recommended) or <code class="text-xs bg-zinc-800 px-1 rounded">pip</code>, then point your AI tool's <code class="text-xs bg-zinc-800 px-1 rounded">.mcp.json</code> at <code class="text-xs bg-zinc-800 px-1 rounded">cruxhive-mcp</code>.</p>
+          <div class="code-block rounded-lg px-4 py-3 font-mono text-xs text-zinc-400 space-y-1">
+            <p><span class="text-zinc-600">$</span> uv tool install cruxhive-mcp</p>
+            <p class="mt-1 text-zinc-600"># .mcp.json:</p>
+            <p>  <span class="text-violet-400">"cruxhive"</span>: { <span class="text-violet-400">"command"</span>: <span class="text-green-300">"cruxhive-mcp"</span> }</p>
+            <p class="mt-1 text-green-400">✓ 11 MCP tools exposed</p>
           </div>
         </div>
       </div>
 
-      <!-- Roadmap progress -->
+      <!-- Roadmap progress (everything Phase 1-4 is shipped) -->
       <div class="bg-zinc-900/40 border border-zinc-800 rounded-xl p-6 mb-10">
-        <p class="text-xs text-zinc-500 font-mono mb-4">RELEASE ROADMAP</p>
+        <p class="text-xs text-zinc-500 font-mono mb-4">SHIPPED</p>
         <div class="space-y-3">
           <div class="flex items-center gap-3">
             <div class="w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center flex-shrink-0">
               <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
-            <div>
-              <span class="text-sm text-zinc-300 font-medium">Phase 1 — Internal dogfooding</span>
-              <span class="text-xs text-zinc-600 ml-2">MCP tools live · .llm/CONTEXT.md canonical · org-layer sync proven</span>
-            </div>
+            <span class="text-sm text-zinc-300">Phase 1 — Canonical context + MCP skill layer</span>
           </div>
           <div class="flex items-center gap-3">
-            <div class="w-5 h-5 rounded-full bg-violet-500/20 border border-violet-500/40 flex items-center justify-center flex-shrink-0">
-              <span class="text-xs text-violet-400 font-bold">2</span>
+            <div class="w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center flex-shrink-0">
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
-            <div>
-              <span class="text-sm text-zinc-400">Phase 2 — Multi-tool support</span>
-              <span class="text-xs text-zinc-600 ml-2">bootstrap.sh · OpenCode plugin · Cursor/Copilot symlinks</span>
-            </div>
+            <span class="text-sm text-zinc-300">Phase 2 — Multi-tool bootstrap (Cursor, Windsurf, Gemini, OpenCode)</span>
           </div>
           <div class="flex items-center gap-3">
-            <div class="w-5 h-5 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center flex-shrink-0">
-              <span class="text-xs text-zinc-600 font-bold">3</span>
+            <div class="w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center flex-shrink-0">
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
-            <div>
-              <span class="text-sm text-zinc-500">Phase 3 — Public launch</span>
-              <span class="text-xs text-zinc-600 ml-2">npx cruxhive init · npm + PyPI · HN launch</span>
-            </div>
+            <span class="text-sm text-zinc-300">Phase 3 — OSS extraction · npm + PyPI publish</span>
           </div>
           <div class="flex items-center gap-3">
-            <div class="w-5 h-5 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center flex-shrink-0">
-              <span class="text-xs text-zinc-600 font-bold">4</span>
+            <div class="w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center flex-shrink-0">
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
-            <div>
-              <span class="text-sm text-zinc-500">Phase 4 — Team sharing + semantic search</span>
-              <span class="text-xs text-zinc-600 ml-2">approval workflow · SQLite FTS5 + vector · confidence scores</span>
+            <span class="text-sm text-zinc-300">Phase 4 — Search · approval workflow · NLI faithfulness · web UI</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center flex-shrink-0">
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
+            <span class="text-sm text-zinc-300">Memory intelligence — entity search · recency · decay · ephemeral</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center flex-shrink-0">
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <span class="text-sm text-zinc-300">Observability — session log · stats · workspace dashboard · digest --compare</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center flex-shrink-0">
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <span class="text-sm text-zinc-300">Solo mode · cross-project search · direnv coverage for Cursor/Windsurf/Gemini</span>
           </div>
         </div>
       </div>
