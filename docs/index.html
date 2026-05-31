@@ -1,763 +1,643 @@
 <!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CruxHive — One knowledge base, every AI tool</title>
-  <meta name="description" content="Stop re-explaining your project to AI tools. CruxHive gives Claude Code, Cursor, OpenCode, Windsurf, and Gemini one shared, human-curated knowledge base — local SQLite, MIT, zero cloud." />
+  <meta name="description" content="Stop re-explaining your project to Claude Code, Cursor, OpenCode, Windsurf, Gemini every session. CruxHive gives all your AI tools one shared, human-curated, searchable knowledge base. Local SQLite, MIT, zero cloud." />
+  <meta name="theme-color" content="#0a0a0a" />
   <meta property="og:title" content="CruxHive — One knowledge base, every AI tool" />
   <meta property="og:description" content="Stop re-explaining your project to AI tools every session. Local SQLite, MIT, zero cloud." />
   <meta property="og:type" content="website" />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            zinc: {
-              950: '#09090b',
-            }
-          },
-          fontFamily: {
-            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
-          }
-        }
-      }
-    }
-  </script>
+  <meta property="og:url" content="https://cruxhive.com" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body { background-color: #09090b; }
-    .gradient-text {
-      background: linear-gradient(135deg, #a78bfa 0%, #818cf8 50%, #60a5fa 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+    :root {
+      --bg:        #0a0a0a;
+      --bg-soft:   #111;
+      --bg-card:   #131313;
+      --line:      #1d1d1d;
+      --line-soft: #161616;
+      --fg:        #ededed;
+      --fg-dim:    #9a9a9a;
+      --fg-mute:   #5a5a5a;
+      --accent:    #f5a524;
+      --accent-soft: #f5a52426;
+      --green:     #6ad06a;
+      --red:       #f87171;
+      --sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+      --mono: 'IBM Plex Mono', 'SF Mono', Menlo, monospace;
     }
-    .gradient-border {
-      background: linear-gradient(135deg, #a78bfa22, #818cf811, #60a5fa22);
-      border: 1px solid #a78bfa33;
+    *{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{
+      font-family:var(--sans);
+      background:var(--bg);
+      color:var(--fg);
+      line-height:1.55;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      letter-spacing:-0.005em;
     }
-    .code-block {
-      background: #111113;
-      border: 1px solid #27272a;
+    a{color:inherit;text-decoration:none}
+    code,kbd{font-family:var(--mono)}
+
+    .container{max-width:1100px;margin:0 auto;padding:0 1.75rem}
+    .narrow{max-width:840px}
+
+    /* ── Nav ─────────────────────────────────────────────────────── */
+    nav{
+      position:sticky;top:0;z-index:50;
+      background:rgba(10,10,10,0.85);
+      backdrop-filter:saturate(180%) blur(12px);
+      border-bottom:1px solid var(--line);
     }
-    .terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
-    .step-line {
-      position: absolute;
-      left: 19px;
-      top: 40px;
-      bottom: -20px;
-      width: 2px;
-      background: linear-gradient(to bottom, #6366f1, transparent);
+    nav .row{display:flex;align-items:center;height:60px;gap:1.5rem}
+    nav .brand{display:flex;align-items:center;gap:.55rem;font-weight:600;letter-spacing:-.01em}
+    nav .brand .logo{color:var(--accent);display:inline-flex;width:22px;height:22px}
+    nav .brand span{color:var(--fg)}
+    nav .brand span em{color:var(--accent);font-style:normal}
+    nav .links{display:flex;gap:1.4rem;margin-left:auto;align-items:center;font-size:.85rem;color:var(--fg-dim)}
+    nav .links a:hover{color:var(--fg)}
+    nav .links .install{
+      background:var(--accent);color:var(--bg);
+      padding:.4rem .85rem;border-radius:6px;font-weight:600;font-size:.8rem;
+      transition:transform .12s ease,filter .12s ease;
     }
-    @keyframes pulse-slow {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
+    nav .links .install:hover{filter:brightness(1.08);transform:translateY(-1px)}
+
+    /* ── Hero ────────────────────────────────────────────────────── */
+    .hero{padding:6rem 0 5rem;border-bottom:1px solid var(--line)}
+    .hero-grid{display:grid;grid-template-columns:1.05fr 1fr;gap:3.5rem;align-items:center}
+    .hero h1{
+      font-family:var(--sans);
+      font-size:clamp(2.6rem,5.5vw,4.2rem);
+      font-weight:700;
+      line-height:1.02;
+      letter-spacing:-0.035em;
+      margin-bottom:1.4rem;
     }
-    .pulse-slow { animation: pulse-slow 2s ease-in-out infinite; }
-    .card-hover {
-      transition: border-color 0.2s, background 0.2s;
+    .hero h1 em{font-style:normal;color:var(--accent)}
+    .hero .lede{
+      font-size:1.05rem;color:var(--fg-dim);max-width:38rem;
+      margin-bottom:1.8rem;line-height:1.6;
     }
-    .card-hover:hover {
-      border-color: #6366f144;
-      background: #18181b;
+    .hero .lede strong{color:var(--fg);font-weight:600}
+    .hero .meta{
+      font-family:var(--mono);font-size:.72rem;color:var(--fg-mute);
+      display:flex;flex-wrap:wrap;gap:.5rem 1rem;margin-bottom:2rem;
+      letter-spacing:0;
+    }
+    .hero .meta b{color:var(--accent);font-weight:500}
+    .hero .install-row{display:flex;align-items:center;gap:.85rem;flex-wrap:wrap}
+    .copy-block{
+      background:var(--bg-card);border:1px solid var(--line);
+      border-radius:7px;padding:.65rem 1rem;
+      font-family:var(--mono);font-size:.85rem;color:var(--fg);
+      display:inline-flex;align-items:center;gap:.65rem;
+      transition:border-color .15s ease;
+    }
+    .copy-block:hover{border-color:var(--fg-mute)}
+    .copy-block .prompt{color:var(--fg-mute)}
+    .copy-block .cmd{color:var(--fg)}
+    .copy-btn{
+      background:none;border:none;cursor:pointer;color:var(--fg-mute);
+      padding:0;display:inline-flex;align-items:center;
+    }
+    .copy-btn:hover{color:var(--accent)}
+    .ghost-link{
+      font-family:var(--mono);font-size:.85rem;color:var(--fg-dim);
+      border-bottom:1px dotted var(--fg-mute);
+      padding-bottom:1px;
+    }
+    .ghost-link:hover{color:var(--accent);border-color:var(--accent)}
+
+    /* ── Terminal mockup ─────────────────────────────────────────── */
+    .terminal{
+      background:var(--bg-card);
+      border:1px solid var(--line);
+      border-radius:9px;overflow:hidden;
+      box-shadow:0 24px 60px rgba(0,0,0,.6);
+    }
+    .terminal-bar{
+      display:flex;align-items:center;gap:.6rem;
+      padding:.55rem .85rem;border-bottom:1px solid var(--line);
+      font-family:var(--mono);font-size:.7rem;color:var(--fg-mute);
+      background:#0d0d0d;
+    }
+    .terminal-bar .dot{width:9px;height:9px;border-radius:50%}
+    .terminal-bar .dot.r{background:#4a3636}
+    .terminal-bar .dot.y{background:#4a4636}
+    .terminal-bar .dot.g{background:#36493a}
+    .terminal-bar .title{margin-left:auto}
+    .terminal-body{
+      padding:1.1rem 1.25rem;
+      font-family:var(--mono);font-size:.78rem;line-height:1.65;
+      color:var(--fg);letter-spacing:0;
+    }
+    .terminal-body .prompt{color:var(--accent);user-select:none}
+    .terminal-body .out{color:var(--fg-dim)}
+    .terminal-body .ok{color:var(--green)}
+    .terminal-body .mute{color:var(--fg-mute)}
+    .terminal-body .hit{color:var(--accent)}
+    .terminal-body .num{color:var(--fg)}
+    .terminal-body .blink::after{
+      content:"▌";color:var(--accent);
+      animation:blink 1.05s steps(2) infinite;margin-left:2px;
+    }
+    @keyframes blink{50%{opacity:0}}
+
+    /* ── Diagram section ─────────────────────────────────────────── */
+    .signal{padding:6rem 0;border-bottom:1px solid var(--line)}
+    .signal-head{display:flex;align-items:baseline;gap:1rem;margin-bottom:3rem}
+    .signal-head .num{font-family:var(--mono);font-size:.75rem;color:var(--fg-mute);letter-spacing:0}
+    .signal-head h2{font-size:2rem;font-weight:600;letter-spacing:-0.02em}
+    .signal-head .rule{flex:1;border-bottom:1px dashed var(--line)}
+    .diagram-wrap{
+      background:radial-gradient(ellipse at center, var(--bg-soft) 0%, var(--bg) 80%);
+      padding:3.5rem 1rem;
+      border:1px solid var(--line);
+      border-radius:12px;
+    }
+    .diagram-wrap svg{width:100%;height:auto;max-width:780px;margin:0 auto;display:block}
+    .diagram-caption{
+      text-align:center;font-family:var(--mono);font-size:.72rem;
+      color:var(--fg-mute);margin-top:1.5rem;letter-spacing:.02em;
+    }
+    .diagram-caption b{color:var(--accent);font-weight:500}
+
+    /* ── Story sections ──────────────────────────────────────────── */
+    .story{padding:5.5rem 0;border-bottom:1px solid var(--line)}
+    .story .row{display:grid;grid-template-columns:1fr 1.05fr;gap:3.5rem;align-items:center}
+    .story.alt .row{grid-template-columns:1.05fr 1fr}
+    .story.alt .row > *:first-child{order:2}
+    .story.alt .row > *:last-child{order:1}
+    .story .num{
+      font-family:var(--mono);font-size:.75rem;color:var(--accent);
+      letter-spacing:.02em;margin-bottom:.85rem;display:block;
+    }
+    .story h3{
+      font-size:1.85rem;font-weight:600;letter-spacing:-0.02em;
+      margin-bottom:1.1rem;line-height:1.15;
+    }
+    .story p{color:var(--fg-dim);font-size:1rem;line-height:1.65;margin-bottom:1.1rem;max-width:32rem}
+    .story p strong{color:var(--fg);font-weight:600}
+    .story p code{font-size:.85em;background:var(--bg-card);padding:.05rem .35rem;border-radius:4px;color:var(--accent)}
+    .story .real-line{
+      font-family:var(--mono);font-size:.78rem;color:var(--fg-mute);
+      letter-spacing:0;margin-top:1rem;display:flex;flex-wrap:wrap;gap:.4rem 1rem;
+    }
+    .story .real-line b{color:var(--fg);font-weight:500}
+
+    .panel{
+      background:var(--bg-card);border:1px solid var(--line);
+      border-radius:9px;padding:1.3rem 1.45rem;font-family:var(--mono);font-size:.8rem;
+      line-height:1.7;color:var(--fg);letter-spacing:0;
+    }
+    .panel .row-2{display:flex;justify-content:space-between;gap:1rem;padding:.18rem 0}
+    .panel .row-2 span:first-child{color:var(--fg-dim)}
+    .panel .row-2 span:last-child{color:var(--fg)}
+    .panel .row-2 .amber{color:var(--accent)}
+    .panel .row-2 .green{color:var(--green)}
+    .panel .row-2 .red{color:var(--red)}
+    .panel .row-2 .mute{color:var(--fg-mute)}
+    .panel hr{border:none;border-top:1px solid var(--line);margin:.6rem 0}
+    .panel .head{font-size:.7rem;color:var(--fg-mute);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.45rem}
+
+    /* ── KPI strip ───────────────────────────────────────────────── */
+    .kpis{
+      display:grid;grid-template-columns:repeat(4,1fr);gap:0;
+      border:1px solid var(--line);border-radius:9px;overflow:hidden;
+      background:var(--bg-card);
+    }
+    .kpi{padding:1.35rem 1.3rem;border-right:1px solid var(--line)}
+    .kpi:last-child{border-right:none}
+    .kpi .label{
+      font-family:var(--mono);font-size:.65rem;color:var(--fg-mute);
+      text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem;
+    }
+    .kpi .value{
+      font-family:var(--sans);font-size:1.85rem;font-weight:700;
+      letter-spacing:-0.025em;color:var(--fg);line-height:1;
+    }
+    .kpi .value em{color:var(--accent);font-style:normal}
+    .kpi .sub{
+      font-family:var(--mono);font-size:.7rem;color:var(--fg-mute);
+      margin-top:.4rem;letter-spacing:0;
+    }
+
+    /* ── Install section ─────────────────────────────────────────── */
+    .install-section{padding:6rem 0;border-bottom:1px solid var(--line);text-align:center}
+    .install-section h2{
+      font-size:2.2rem;font-weight:600;letter-spacing:-0.025em;margin-bottom:.6rem;
+    }
+    .install-section p.sub{
+      color:var(--fg-dim);font-size:1rem;margin-bottom:2.4rem;
+    }
+    .install-grid{
+      display:grid;grid-template-columns:1fr 1fr;gap:1rem;
+      max-width:760px;margin:0 auto 2rem;
+    }
+    .install-card{
+      text-align:left;
+      background:var(--bg-card);border:1px solid var(--line);
+      border-radius:9px;padding:1.2rem 1.3rem;
+      transition:border-color .15s ease,transform .15s ease;
+    }
+    .install-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+    .install-card .label{
+      font-family:var(--mono);font-size:.7rem;color:var(--accent);
+      text-transform:uppercase;letter-spacing:.08em;margin-bottom:.45rem;
+    }
+    .install-card .pkg{
+      font-family:var(--mono);font-size:.95rem;color:var(--fg);margin-bottom:.5rem;
+    }
+    .install-card .desc{
+      font-size:.82rem;color:var(--fg-dim);margin-bottom:.85rem;line-height:1.55;
+    }
+    .install-card .cmd{
+      font-family:var(--mono);font-size:.8rem;color:var(--fg);
+      background:var(--bg);border:1px solid var(--line);
+      padding:.55rem .8rem;border-radius:6px;
+    }
+    .install-card .cmd .prompt{color:var(--fg-mute);user-select:none}
+
+    .roadmap{
+      max-width:760px;margin:2.5rem auto 0;text-align:left;
+      font-family:var(--mono);font-size:.78rem;color:var(--fg-dim);
+      letter-spacing:0;
+    }
+    .roadmap .item{display:flex;gap:.7rem;padding:.35rem 0;align-items:baseline}
+    .roadmap .check{color:var(--green);user-select:none}
+    .roadmap .item b{color:var(--fg);font-weight:500}
+
+    /* ── Footer ──────────────────────────────────────────────────── */
+    footer{padding:3.5rem 0 4rem;color:var(--fg-mute)}
+    footer .row{display:flex;flex-wrap:wrap;gap:1.5rem 2rem;align-items:baseline;font-family:var(--mono);font-size:.75rem;letter-spacing:0}
+    footer .row .links{margin-left:auto;display:flex;gap:1.2rem}
+    footer .row .links a:hover{color:var(--accent)}
+
+    /* ── Responsive ──────────────────────────────────────────────── */
+    @media (max-width: 900px){
+      .hero{padding:4rem 0 3rem}
+      .hero-grid{grid-template-columns:1fr;gap:2.5rem}
+      .story .row{grid-template-columns:1fr;gap:1.8rem}
+      .story.alt .row > *:first-child{order:1}
+      .story.alt .row > *:last-child{order:2}
+      .kpis{grid-template-columns:repeat(2,1fr)}
+      .kpi:nth-child(2){border-right:none}
+      .kpi:nth-child(1),.kpi:nth-child(2){border-bottom:1px solid var(--line)}
+      .install-grid{grid-template-columns:1fr}
+      .signal{padding:4rem 0}
+      .install-section{padding:4rem 0}
+      .story{padding:4rem 0}
     }
   </style>
 </head>
-<body class="text-zinc-100 antialiased">
+<body>
 
-  <!-- Nav -->
-  <nav class="fixed top-0 left-0 right-0 z-50 border-b border-zinc-800/60 backdrop-blur-sm bg-zinc-950/80">
-    <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <div class="w-6 h-6 rounded bg-violet-500 flex items-center justify-center">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M2 3h10M2 7h7M2 11h5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <span class="font-semibold text-zinc-100 tracking-tight">cruxhive</span>
-        <span class="text-zinc-600 text-sm ml-1">/ beta</span>
-      </div>
-      <div class="flex items-center gap-6">
-        <a href="#how" class="text-sm text-zinc-400 hover:text-zinc-200 transition-colors hidden sm:block">How it works</a>
-        <a href="#features" class="text-sm text-zinc-400 hover:text-zinc-200 transition-colors hidden sm:block">Features</a>
-        <a href="#compare" class="text-sm text-zinc-400 hover:text-zinc-200 transition-colors hidden sm:block">Compare</a>
-        <a href="guide.html" class="text-sm text-zinc-400 hover:text-zinc-200 transition-colors hidden sm:block">Docs</a>
-        <a href="https://github.com/cruxhive/cruxhive" class="text-sm text-zinc-400 hover:text-zinc-200 transition-colors flex items-center gap-1.5">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-          GitHub
-        </a>
-        <a href="#start" class="text-sm bg-violet-600 hover:bg-violet-500 text-white px-4 py-1.5 rounded-md transition-colors font-medium">Get started</a>
-      </div>
+<nav>
+  <div class="container row">
+    <a href="/" class="brand">
+      <span class="logo">
+        <svg viewBox="0 0 64 64" width="22" height="22" fill="none">
+          <path d="M32 4 L57 18.5 L57 45.5 L32 60 L7 45.5 L7 18.5 Z" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/>
+          <g stroke="currentColor" stroke-width="1" opacity="0.45">
+            <line x1="32" y1="32" x2="32" y2="15"/><line x1="32" y1="32" x2="47" y2="23"/>
+            <line x1="32" y1="32" x2="47" y2="41"/><line x1="32" y1="32" x2="32" y2="49"/>
+            <line x1="32" y1="32" x2="17" y2="41"/><line x1="32" y1="32" x2="17" y2="23"/>
+          </g>
+          <circle cx="32" cy="15" r="2.5" fill="currentColor"/><circle cx="47" cy="23" r="2.5" fill="currentColor"/>
+          <circle cx="47" cy="41" r="2.5" fill="currentColor"/><circle cx="32" cy="49" r="2.5" fill="currentColor"/>
+          <circle cx="17" cy="41" r="2.5" fill="currentColor"/><circle cx="17" cy="23" r="2.5" fill="currentColor"/>
+          <circle cx="32" cy="32" r="4.5" fill="currentColor"/>
+        </svg>
+      </span>
+      <span>crux<em>hive</em></span>
+    </a>
+    <div class="links">
+      <a href="#how">How it works</a>
+      <a href="guide.html">Docs</a>
+      <a href="https://github.com/cruxhive/cruxhive">GitHub</a>
+      <a href="#install" class="install">Install</a>
     </div>
-  </nav>
+  </div>
+</nav>
 
-  <!-- Hero -->
-  <section class="pt-32 pb-24 px-6">
-    <div class="max-w-4xl mx-auto text-center">
-      <div class="inline-flex items-center gap-2 text-xs text-violet-400 bg-violet-500/10 border border-violet-500/20 rounded-full px-3 py-1 mb-8">
-        <span class="pulse-slow w-1.5 h-1.5 bg-violet-400 rounded-full"></span>
-        Published · MIT · local-first · v0.11 on PyPI · v0.12 on npm
-      </div>
-
-      <h1 class="text-5xl sm:text-6xl font-bold tracking-tight mb-6 leading-tight">
-        One knowledge base.<br/>
-        <span class="gradient-text">Every AI tool reads from it.</span>
-      </h1>
-
-      <p class="text-xl text-zinc-400 max-w-2xl mx-auto mb-6 leading-relaxed">
-        Stop re-explaining your project to Claude Code, Cursor, OpenCode every session. CruxHive gives all your AI tools <strong class="text-zinc-200">one curated, searchable, human-approved knowledge base</strong> — synced across projects, indexed locally, MIT-licensed.
+<!-- ─── HERO ───────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="container hero-grid">
+    <div>
+      <h1>One knowledge base.<br/><em>Every AI tool.</em></h1>
+      <p class="lede">
+        Stop re-explaining your project to Claude Code, Cursor, OpenCode every session.
+        CruxHive gives all your AI tools <strong>one shared, human-curated, searchable knowledge base</strong> —
+        local SQLite, MIT, zero cloud.
       </p>
-
-      <div class="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-zinc-500 mb-10">
-        <span>✓ Works with 5 AI tools</span>
-        <span>✓ Local SQLite · zero cloud</span>
-        <span>✓ Cross-project search</span>
-        <span>✓ Approval gate</span>
-        <span>✓ MIT</span>
+      <div class="meta">
+        <span><b>cruxhive-mcp</b> 0.11</span>
+        <span><b>@cruxhive/cli</b> 0.12</span>
+        <span>32 tests</span>
+        <span>MIT</span>
+        <span>0 cloud</span>
       </div>
-
-      <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
-        <div class="code-block rounded-lg px-5 py-3 font-mono text-sm text-violet-300 flex items-center gap-3">
-          <span class="text-zinc-600">$</span>
-          <span>npm install -g @cruxhive/cli &amp;&amp; cruxhive init</span>
-          <button onclick="navigator.clipboard.writeText('npm install -g @cruxhive/cli && cruxhive init')" class="text-zinc-600 hover:text-zinc-400 transition-colors ml-2">
+      <div class="install-row">
+        <span class="copy-block">
+          <span class="prompt">$</span>
+          <span class="cmd">npm install -g @cruxhive/cli</span>
+          <button class="copy-btn" onclick="navigator.clipboard.writeText('npm install -g @cruxhive/cli')" aria-label="Copy">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
           </button>
-        </div>
-        <a href="guide.html" class="text-zinc-400 hover:text-zinc-200 text-sm transition-colors flex items-center gap-1">
-          Read the docs →
-        </a>
-      </div>
-
-      <!-- Terminal mockup -->
-      <div class="code-block rounded-xl overflow-hidden max-w-2xl mx-auto text-left shadow-2xl shadow-black/40">
-        <div class="flex items-center gap-2 px-4 py-3 border-b border-zinc-800">
-          <div class="terminal-dot bg-red-500/80"></div>
-          <div class="terminal-dot bg-yellow-500/80"></div>
-          <div class="terminal-dot bg-green-500/80"></div>
-          <span class="ml-2 text-xs text-zinc-600 font-mono">cruxhive health</span>
-        </div>
-        <div class="p-5 font-mono text-sm space-y-1">
-          <p><span class="text-zinc-600">cruxhive</span> <span class="text-violet-400">health</span> <span class="text-zinc-600">—</span> <span class="text-zinc-500">2026-05-27 · mozbridge</span></p>
-          <p class="mt-3 text-zinc-500">────────────────────────────────────</p>
-          <p><span class="text-zinc-400">Entries</span>    <span class="text-zinc-100">142 total</span>  <span class="text-green-400 text-xs">+8 this week</span></p>
-          <p><span class="text-zinc-400">Coverage</span>   <span class="text-zinc-100">74%</span> <span class="text-zinc-600 text-xs">of areas</span></p>
-          <p><span class="text-zinc-400">Freshness</span>  <span class="text-zinc-100">88%</span> <span class="text-zinc-600 text-xs">within half-life</span></p>
-          <p><span class="text-zinc-400">Bus factor</span> <span class="text-green-400">3</span>  <span class="text-zinc-600 text-xs">unique contributors</span></p>
-          <p class="mt-2"><span class="text-zinc-400">Queue</span>      <span class="text-yellow-400">3 pending</span>  <span class="text-zinc-600 text-xs">oldest: 2 days</span></p>
-          <p><span class="text-zinc-400">Faithfulness</span> <span class="text-green-400">94%</span> <span class="text-zinc-600 text-xs">constraint compliance</span></p>
-          <p class="mt-3 text-zinc-500">────────────────────────────────────</p>
-          <p class="text-green-400">✓ No alarms. Run <span class="text-violet-400">cruxhive review</span> to clear the queue.</p>
-        </div>
+        </span>
+        <a class="ghost-link" href="guide.html">Read the docs →</a>
       </div>
     </div>
-  </section>
 
-  <!-- Problem -->
-  <section class="py-24 px-6 border-t border-zinc-800/50">
-    <div class="max-w-5xl mx-auto">
-      <div class="text-center mb-16">
-        <p class="text-sm text-violet-400 font-mono mb-3">THE PROBLEM</p>
-        <h2 class="text-3xl sm:text-4xl font-bold tracking-tight mb-4">Stage 7 has no tooling.</h2>
-        <p class="text-zinc-400 max-w-xl mx-auto">Every AI coding tool covers the first six stages of engineering work. The seventh — Capture — has been ignored. That's where all value is lost.</p>
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        <span class="title">~/mozbridge · cruxhive search --workspace</span>
       </div>
-
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-12">
-        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 text-center">
-          <p class="text-xs text-zinc-600 mb-1">01</p>
-          <p class="text-sm font-medium">Observe</p>
-        </div>
-        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 text-center">
-          <p class="text-xs text-zinc-600 mb-1">02</p>
-          <p class="text-sm font-medium">Define</p>
-        </div>
-        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 text-center">
-          <p class="text-xs text-zinc-600 mb-1">03</p>
-          <p class="text-sm font-medium">Research</p>
-        </div>
-        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 text-center">
-          <p class="text-xs text-zinc-600 mb-1">04</p>
-          <p class="text-sm font-medium">Reason</p>
-        </div>
-        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 text-center">
-          <p class="text-xs text-zinc-600 mb-1">05</p>
-          <p class="text-sm font-medium">Decide</p>
-        </div>
-        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 text-center">
-          <p class="text-xs text-zinc-600 mb-1">06</p>
-          <p class="text-sm font-medium">Implement</p>
-        </div>
-        <div class="col-span-2 gradient-border rounded-lg p-4 text-center">
-          <p class="text-xs text-violet-400 mb-1">07 — missing everywhere</p>
-          <p class="text-sm font-bold gradient-text">Capture</p>
-        </div>
-      </div>
-
-      <div class="grid sm:grid-cols-3 gap-6">
-        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <div class="text-3xl font-bold text-violet-400 mb-2">80%</div>
-          <p class="text-sm text-zinc-400">of organisational knowledge is tacit — generated during sessions but never written down. It leaves when the session closes.</p>
-        </div>
-        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <div class="text-3xl font-bold text-violet-400 mb-2">0</div>
-          <p class="text-sm text-zinc-400">sessions share memory with the next. Every developer, every tool, every day starts from scratch — even if a teammate solved the same problem yesterday.</p>
-        </div>
-        <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
-          <div class="text-3xl font-bold text-violet-400 mb-2">$300k</div>
-          <p class="text-sm text-zinc-400">per week in knowledge loss at a 1,000-person team with 7% attrition. AI makes this worse — more knowledge is generated, less is captured.</p>
-        </div>
+      <div class="terminal-body">
+        <span class="prompt">$</span> cruxhive search --workspace <span class="hit">"auth"</span><br/>
+        <br/>
+        <span class="mute">Searching 8 projects · BM25 + entity + recency …</span><br/>
+        <br/>
+        <span class="num">1.</span> <b>mozbridge</b>      <span class="mute">.llm/decisions/auth.md</span>     <span class="ok">match</span><br/>
+        <span class="num">2.</span> <b>orphimusev2</b>    <span class="mute">.llm/plans/logto.md</span>         <span class="ok">match</span><br/>
+        <span class="num">3.</span> <b>Pratios</b>        <span class="mute">.llm/memory/sessions.md</span>     <span class="ok">match</span><br/>
+        <span class="num">4.</span> <b>mozbridge</b>      <span class="mute">.llm/context/identity.md</span>    <span class="hit">entity</span><br/>
+        <span class="num">5.</span> <b>traderdeck</b>     <span class="mute">.llm/plans/oauth-flow.md</span>    <span class="ok">match</span><br/>
+        <br/>
+        <span class="ok">✓</span> <span class="out">5 results across 4 projects · 0.06 s · 124 entries indexed</span><br/>
+        <br/>
+        <span class="prompt">$</span><span class="blink"></span>
       </div>
     </div>
-  </section>
+  </div>
+</section>
 
-  <!-- How it works -->
-  <section id="how" class="py-24 px-6 border-t border-zinc-800/50">
-    <div class="max-w-5xl mx-auto">
-      <div class="text-center mb-16">
-        <p class="text-sm text-violet-400 font-mono mb-3">HOW IT WORKS</p>
-        <h2 class="text-3xl sm:text-4xl font-bold tracking-tight mb-4">Four steps. Zero cloud.</h2>
-        <p class="text-zinc-400 max-w-xl mx-auto">CruxHive runs entirely on your machine. Git is the database. SQLite is the index. No accounts, no sync servers, no API costs.</p>
-      </div>
-
-      <div class="grid sm:grid-cols-2 gap-8 items-start">
-        <div class="space-y-10">
-          <div class="flex gap-5 relative">
-            <div class="relative flex-shrink-0">
-              <div class="w-10 h-10 rounded-full bg-violet-500/20 border border-violet-500/40 flex items-center justify-center text-sm font-bold text-violet-400">1</div>
-              <div class="step-line"></div>
-            </div>
-            <div>
-              <h3 class="font-semibold mb-1">Init</h3>
-              <p class="text-sm text-zinc-400 mb-3">One command bootstraps your knowledge layer. CruxHive detects your AI tools and wires itself in automatically.</p>
-              <div class="code-block rounded-md px-4 py-2 font-mono text-xs text-zinc-400">
-                <span class="text-zinc-600">$</span> cruxhive init<br/>
-                <span class="text-green-400">✓</span> Wired: Claude Code, OpenCode, Cursor, Windsurf, Gemini<br/>
-                <span class="text-green-400">✓</span> Created .llm/ structure + .gitignore<br/>
-                <span class="text-green-400">✓</span> Installed MCP server + 6 slash commands<br/>
-                <span class="text-green-400">✓</span> SessionStart hook + git post-commit auto-index
-              </div>
-            </div>
-          </div>
-
-          <div class="flex gap-5 relative">
-            <div class="relative flex-shrink-0">
-              <div class="w-10 h-10 rounded-full bg-violet-500/20 border border-violet-500/40 flex items-center justify-center text-sm font-bold text-violet-400">2</div>
-              <div class="step-line"></div>
-            </div>
-            <div>
-              <h3 class="font-semibold mb-1">Propose</h3>
-              <p class="text-sm text-zinc-400 mb-3">AI sessions surface knowledge worth capturing. One command (or one MCP tool call) queues it for review. Secrets are scanned before queuing.</p>
-              <div class="code-block rounded-md px-4 py-2 font-mono text-xs text-zinc-400">
-                <span class="text-zinc-600">$</span> cruxhive propose <span class="text-violet-300">"constraint: never store JWT in localStorage"</span><br/>
-                <span class="text-green-400">✓</span> Secrets scan: clean<br/>
-                <span class="text-green-400">✓</span> Queued for review
-              </div>
-            </div>
-          </div>
-
-          <div class="flex gap-5 relative">
-            <div class="relative flex-shrink-0">
-              <div class="w-10 h-10 rounded-full bg-violet-500/20 border border-violet-500/40 flex items-center justify-center text-sm font-bold text-violet-400">3</div>
-              <div class="step-line"></div>
-            </div>
-            <div>
-              <h3 class="font-semibold mb-1">Review</h3>
-              <p class="text-sm text-zinc-400 mb-3">Humans always approve before knowledge enters the shared base. AI can propose — never write directly. One keystroke per entry.</p>
-              <div class="code-block rounded-md px-4 py-2 font-mono text-xs text-zinc-400">
-                <span class="text-zinc-600">$</span> cruxhive review<br/>
-                <span class="text-zinc-500">» [constraint] never store JWT in localStorage</span><br/>
-                <span class="text-zinc-500">   2 related entries found ↗</span><br/>
-                <span class="text-zinc-600">[a] approve  [r] reject  [e] edit</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="flex gap-5">
-            <div class="flex-shrink-0">
-              <div class="w-10 h-10 rounded-full bg-violet-500/20 border border-violet-500/40 flex items-center justify-center text-sm font-bold text-violet-400">4</div>
-            </div>
-            <div>
-              <h3 class="font-semibold mb-1">Compound</h3>
-              <p class="text-sm text-zinc-400">Every approved entry raises the floor for all sessions, all developers, all tools. Month 6 is smarter than month 1 — not because the model improved, but because the knowledge grew.</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Config file visual -->
-        <div class="code-block rounded-xl overflow-hidden">
-          <div class="flex items-center gap-2 px-4 py-3 border-b border-zinc-800">
-            <div class="terminal-dot bg-zinc-700"></div>
-            <div class="terminal-dot bg-zinc-700"></div>
-            <div class="terminal-dot bg-zinc-700"></div>
-            <span class="ml-2 text-xs text-zinc-600 font-mono">cruxhive.config.yaml</span>
-          </div>
-          <div class="p-5 font-mono text-xs space-y-1 text-zinc-400">
-            <p><span class="text-violet-400">version</span>: 1</p>
-            <p><span class="text-violet-400">project</span>: mozbridge</p>
-            <p><span class="text-violet-400">org_remote</span>: github.com/yourorg/cruxhive</p>
-            <p><span class="text-violet-400">tools</span>:</p>
-            <p>  - claude-code</p>
-            <p>  - opencode</p>
-            <p>  - cursor</p>
-            <p><span class="text-violet-400">storage</span>: simple   <span class="text-zinc-700"># simple | graph | cloud</span></p>
-            <p class="mt-4 text-zinc-600"># Commit this file. Every new team member</p>
-            <p class="text-zinc-600"># runs cruxhive init and gets everything.</p>
-          </div>
-          <div class="border-t border-zinc-800 p-4">
-            <p class="text-xs text-zinc-600 font-mono mb-3">.llm/memory/constraints/</p>
-            <div class="space-y-2">
-              <div class="bg-zinc-900 rounded px-3 py-2">
-                <p class="text-xs font-mono text-zinc-400"><span class="text-yellow-400">type</span>: constraint  <span class="text-green-400">confidence</span>: high</p>
-                <p class="text-xs font-mono text-zinc-500 mt-1">never store JWT in localStorage — XSS risk</p>
-              </div>
-              <div class="bg-zinc-900 rounded px-3 py-2">
-                <p class="text-xs font-mono text-zinc-400"><span class="text-blue-400">type</span>: decision  <span class="text-green-400">confidence</span>: high</p>
-                <p class="text-xs font-mono text-zinc-500 mt-1">use BM25 + vector hybrid search, RRF k=60</p>
-              </div>
-              <div class="bg-zinc-900 rounded px-3 py-2">
-                <p class="text-xs font-mono text-zinc-400"><span class="text-violet-400">type</span>: fact  <span class="text-green-400">confidence</span>: high</p>
-                <p class="text-xs font-mono text-zinc-500 mt-1">prod host: 91.99.212.250 · Hetzner VPS</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+<!-- ─── HOW IT WORKS — DIAGRAM ─────────────────────────────────── -->
+<section id="how" class="signal">
+  <div class="container">
+    <div class="signal-head">
+      <span class="num">01 / How it works</span>
+      <h2>One server. Many tools. Three tiers.</h2>
+      <span class="rule"></span>
     </div>
-  </section>
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 800 420" xmlns="http://www.w3.org/2000/svg" fill="none">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#f5a524"/>
+          </marker>
+        </defs>
 
-  <!-- 7 Knowledge Types -->
-  <section class="py-24 px-6 border-t border-zinc-800/50">
-    <div class="max-w-5xl mx-auto">
-      <div class="text-center mb-12">
-        <p class="text-sm text-violet-400 font-mono mb-3">INFORMATION MODEL</p>
-        <h2 class="text-3xl font-bold tracking-tight mb-4">Seven types. One system.</h2>
-        <p class="text-zinc-400 max-w-xl mx-auto">Every piece of knowledge has a declared type. Type determines expiry, confidence defaults, and approval routing.</p>
-      </div>
+        <!-- left column: AI tools -->
+        <g font-family="IBM Plex Mono, monospace" font-size="11" fill="#9a9a9a">
+          <text x="50" y="40" fill="#5a5a5a">AI TOOLS</text>
 
-      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 card-hover">
-          <div class="text-lg mb-2">📌</div>
-          <h3 class="font-semibold text-sm mb-1">Fact</h3>
-          <p class="text-xs text-zinc-500">Verified truths — IPs, versions, URLs, API contracts. Expires in 90 days.</p>
-        </div>
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 card-hover">
-          <div class="text-lg mb-2">⚖️</div>
-          <h3 class="font-semibold text-sm mb-1">Decision</h3>
-          <p class="text-xs text-zinc-500">Architectural choices with rationale. Immutable unless superseded. 365-day review.</p>
-        </div>
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 card-hover">
-          <div class="text-lg mb-2">🗺️</div>
-          <h3 class="font-semibold text-sm mb-1">Plan</h3>
-          <p class="text-xs text-zinc-500">Sprint goals, upcoming work. Expires on completion.</p>
-        </div>
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 card-hover">
-          <div class="text-lg mb-2">🔁</div>
-          <h3 class="font-semibold text-sm mb-1">Pattern</h3>
-          <p class="text-xs text-zinc-500">Reusable solutions, code conventions the team repeats. 180-day review.</p>
-        </div>
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 card-hover">
-          <div class="text-lg mb-2">🚫</div>
-          <h3 class="font-semibold text-sm mb-1">Constraint</h3>
-          <p class="text-xs text-zinc-500">Things the team must NOT do and why. Never expires. NLI-monitored for violations.</p>
-        </div>
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 card-hover">
-          <div class="text-lg mb-2">🔬</div>
-          <h3 class="font-semibold text-sm mb-1">Research</h3>
-          <p class="text-xs text-zinc-500">Competitive intelligence, technology evaluations. 90-day review.</p>
-        </div>
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 card-hover col-span-1 lg:col-span-2">
-          <div class="text-lg mb-2">✅</div>
-          <h3 class="font-semibold text-sm mb-1">Outcome</h3>
-          <p class="text-xs text-zinc-500">What actually happened — deploy results, experiment outcomes, post-mortems. Permanent record. Never expires.</p>
-        </div>
-      </div>
+          <rect x="40" y="60"  width="150" height="34" rx="6" fill="#131313" stroke="#1d1d1d"/>
+          <text x="115" y="82" text-anchor="middle" fill="#ededed">Claude Code</text>
+
+          <rect x="40" y="108" width="150" height="34" rx="6" fill="#131313" stroke="#1d1d1d"/>
+          <text x="115" y="130" text-anchor="middle" fill="#ededed">OpenCode</text>
+
+          <rect x="40" y="156" width="150" height="34" rx="6" fill="#131313" stroke="#1d1d1d"/>
+          <text x="115" y="178" text-anchor="middle" fill="#ededed">Cursor</text>
+
+          <rect x="40" y="204" width="150" height="34" rx="6" fill="#131313" stroke="#1d1d1d"/>
+          <text x="115" y="226" text-anchor="middle" fill="#ededed">Windsurf</text>
+
+          <rect x="40" y="252" width="150" height="34" rx="6" fill="#131313" stroke="#1d1d1d"/>
+          <text x="115" y="274" text-anchor="middle" fill="#ededed">Gemini CLI</text>
+
+          <rect x="40" y="300" width="150" height="34" rx="6" fill="#131313" stroke="#1d1d1d" stroke-dasharray="3 3"/>
+          <text x="115" y="322" text-anchor="middle" fill="#5a5a5a">+ any MCP client</text>
+        </g>
+
+        <!-- center: cruxhive node -->
+        <g>
+          <rect x="295" y="160" width="210" height="100" rx="10" fill="#0a0a0a" stroke="#f5a524" stroke-width="1.5"/>
+          <g fill="#f5a524" font-family="IBM Plex Sans, sans-serif">
+            <text x="400" y="195" text-anchor="middle" font-size="18" font-weight="600">CruxHive</text>
+            <text x="400" y="216" text-anchor="middle" font-size="11" fill="#9a9a9a" font-family="IBM Plex Mono, monospace">MCP server · SQLite</text>
+            <text x="400" y="238" text-anchor="middle" font-size="10" fill="#5a5a5a" font-family="IBM Plex Mono, monospace">BM25 + entity + recency</text>
+          </g>
+        </g>
+
+        <!-- right column: tiers -->
+        <g font-family="IBM Plex Mono, monospace" font-size="11">
+          <text x="610" y="40" fill="#5a5a5a">KNOWLEDGE LAYERS</text>
+
+          <rect x="610" y="60"  width="150" height="48" rx="6" fill="#131313" stroke="#1d1d1d"/>
+          <text x="685" y="82" text-anchor="middle" fill="#ededed" font-size="12" font-weight="600">Personal</text>
+          <text x="685" y="98" text-anchor="middle" fill="#5a5a5a" font-size="10">~/.cruxhive/personal/</text>
+
+          <rect x="610" y="124" width="150" height="48" rx="6" fill="#131313" stroke="#f5a524" stroke-width="1.2"/>
+          <text x="685" y="146" text-anchor="middle" fill="#ededed" font-size="12" font-weight="600">Project</text>
+          <text x="685" y="162" text-anchor="middle" fill="#5a5a5a" font-size="10">.llm/ (in repo)</text>
+
+          <rect x="610" y="188" width="150" height="48" rx="6" fill="#131313" stroke="#1d1d1d"/>
+          <text x="685" y="210" text-anchor="middle" fill="#ededed" font-size="12" font-weight="600">Org</text>
+          <text x="685" y="226" text-anchor="middle" fill="#5a5a5a" font-size="10">shared remote · synced</text>
+        </g>
+
+        <!-- arrows: AI tools → CruxHive -->
+        <g stroke="#f5a524" stroke-width="1" opacity="0.55" fill="none">
+          <path d="M 190 77  C 240 77,  260 200, 295 200" marker-end="url(#arr)"/>
+          <path d="M 190 125 C 240 125, 260 205, 295 205" marker-end="url(#arr)"/>
+          <path d="M 190 173 C 240 173, 260 210, 295 210" marker-end="url(#arr)"/>
+          <path d="M 190 221 C 240 221, 260 215, 295 215" marker-end="url(#arr)"/>
+          <path d="M 190 269 C 240 269, 260 220, 295 220" marker-end="url(#arr)"/>
+          <path d="M 190 317 C 240 317, 260 225, 295 225" marker-end="url(#arr)" opacity="0.3"/>
+        </g>
+
+        <!-- arrows: CruxHive → tiers -->
+        <g stroke="#f5a524" stroke-width="1" opacity="0.55" fill="none">
+          <path d="M 505 195 C 540 195, 570 84,  610 84"  marker-end="url(#arr)"/>
+          <path d="M 505 210 C 540 210, 570 148, 610 148" marker-end="url(#arr)"/>
+          <path d="M 505 225 C 540 225, 570 212, 610 212" marker-end="url(#arr)"/>
+        </g>
+
+        <!-- bottom flow callout -->
+        <g font-family="IBM Plex Mono, monospace" font-size="10" fill="#5a5a5a">
+          <line x1="40" y1="370" x2="760" y2="370" stroke="#1d1d1d"/>
+          <text x="115" y="390" text-anchor="middle">read CONTEXT.md</text>
+          <text x="115" y="404" text-anchor="middle">+ call MCP tools</text>
+          <text x="400" y="390" text-anchor="middle" fill="#f5a524">search · propose · review · approve · index</text>
+          <text x="400" y="404" text-anchor="middle">human approval gate</text>
+          <text x="685" y="390" text-anchor="middle">indexed locally</text>
+          <text x="685" y="404" text-anchor="middle">git-versioned</text>
+        </g>
+      </svg>
     </div>
-  </section>
+    <p class="diagram-caption">
+      Every AI tool reads from the same SQLite-backed index. <b>You</b> approve what goes in. Nothing leaves your machine.
+    </p>
+  </div>
+</section>
 
-  <!-- Features -->
-  <section id="features" class="py-24 px-6 border-t border-zinc-800/50">
-    <div class="max-w-5xl mx-auto">
-      <div class="text-center mb-16">
-        <p class="text-sm text-violet-400 font-mono mb-3">FEATURES</p>
-        <h2 class="text-3xl font-bold tracking-tight mb-4">Built for the whole team.</h2>
-      </div>
-
-      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 card-hover">
-          <div class="w-8 h-8 bg-violet-500/20 rounded-lg flex items-center justify-center mb-3">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          </div>
-          <h3 class="font-semibold mb-2">Human approval gate</h3>
-          <p class="text-sm text-zinc-500">AI proposes, humans decide. Knowledge never enters the shared base without review. The quality gate that prevents AI hallucinations from accumulating.</p>
-        </div>
-
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 card-hover">
-          <div class="w-8 h-8 bg-violet-500/20 rounded-lg flex items-center justify-center mb-3">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          </div>
-          <h3 class="font-semibold mb-2">Hybrid search + entity boost</h3>
-          <p class="text-sm text-zinc-500">BM25 + optional vector + recency boost + entity-aware reranking. Surfaces entries even when the query is an IP, file path, or identifier the index didn't tokenize. ~60ms, local.</p>
-        </div>
-
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 card-hover">
-          <div class="w-8 h-8 bg-violet-500/20 rounded-lg flex items-center justify-center mb-3">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><rect x="2" y="3" width="6" height="6" rx="1"/><rect x="9" y="3" width="6" height="6" rx="1"/><rect x="16" y="3" width="6" height="6" rx="1"/><path d="M5 9v3m4-3v3m4-3v3M5 15h14"/></svg>
-          </div>
-          <h3 class="font-semibold mb-2">Tool-agnostic via MCP</h3>
-          <p class="text-sm text-zinc-500">One MCP server. Claude Code, OpenCode, Cursor, Windsurf, Gemini CLI — all read from the same knowledge base. Same slash commands in Claude &amp; OpenCode. <code class="text-xs bg-zinc-800 px-1 rounded">cruxhive direnv</code> covers tools without hooks.</p>
-        </div>
-
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 card-hover">
-          <div class="w-8 h-8 bg-violet-500/20 rounded-lg flex items-center justify-center mb-3">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M3 6l9-4 9 4v10l-9 4-9-4V6z"/></svg>
-          </div>
-          <h3 class="font-semibold mb-2">Three-tier model</h3>
-          <p class="text-sm text-zinc-500">Personal (~/.cruxhive/) → Project (.llm/ in repo) → Org (shared git remote). Each tier has independent access control. Personal context never leaks to org layer.</p>
-        </div>
-
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 card-hover">
-          <div class="w-8 h-8 bg-violet-500/20 rounded-lg flex items-center justify-center mb-3">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </div>
-          <h3 class="font-semibold mb-2">Faithfulness + conflict detection</h3>
-          <p class="text-sm text-zinc-500">Local NLI model flags when AI output contradicts a constraint, AND when a pending proposal contradicts an existing approved one — at review time. Catch drift before it's approved.</p>
-        </div>
-
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 card-hover">
-          <div class="w-8 h-8 bg-violet-500/20 rounded-lg flex items-center justify-center mb-3">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-          </div>
-          <h3 class="font-semibold mb-2">Workspace dashboard + trends</h3>
-          <p class="text-sm text-zinc-500"><code class="text-xs bg-zinc-800 px-1 rounded">cruxhive ui --workspace</code> rolls up KPIs across every project. <code class="text-xs bg-zinc-800 px-1 rounded">cruxhive digest --compare</code> shows week-over-week deltas. 7 KPIs with thresholds, color-coded, drilldown drawer.</p>
-        </div>
-
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 card-hover">
-          <div class="w-8 h-8 bg-violet-500/20 rounded-lg flex items-center justify-center mb-3">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-          </div>
-          <h3 class="font-semibold mb-2">Auto-extract with approval</h3>
-          <p class="text-sm text-zinc-500"><code class="text-xs bg-zinc-800 px-1 rounded">/extract</code> distills a session into N proposals. <code class="text-xs bg-zinc-800 px-1 rounded">/summarize</code> files one structured research entry. Both go to the approval queue — never auto-write. Mem0's idea, with the trust gate intact.</p>
-        </div>
-
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 card-hover">
-          <div class="w-8 h-8 bg-violet-500/20 rounded-lg flex items-center justify-center mb-3">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-          </div>
-          <h3 class="font-semibold mb-2">Confidence decay + ephemeral</h3>
-          <p class="text-sm text-zinc-500">High-confidence entries auto-downgrade by age (computed at search). <code class="text-xs bg-zinc-800 px-1 rounded">source: ephemeral</code> entries auto-expire after 7 days unless promoted. Knowledge decays the way memory should.</p>
-        </div>
-
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 card-hover">
-          <div class="w-8 h-8 bg-violet-500/20 rounded-lg flex items-center justify-center mb-3">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M9 17l-5 5v-5z"/><path d="M14 2v6h6"/><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg>
-          </div>
-          <h3 class="font-semibold mb-2">Per-AI observability</h3>
-          <p class="text-sm text-zinc-500">Every MCP call &amp; session start is logged with the calling AI tool. Compare Claude vs OpenCode vs Cursor on the same knowledge base. No cloud telemetry — pure local SQLite.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Comparison -->
-  <section id="compare" class="py-24 px-6 border-t border-zinc-800/50">
-    <div class="max-w-5xl mx-auto">
-      <div class="text-center mb-12">
-        <p class="text-sm text-violet-400 font-mono mb-3">COMPARISON</p>
-        <h2 class="text-3xl font-bold tracking-tight mb-4">Every tool has a steering file. Only CruxHive has governance.</h2>
-        <p class="text-zinc-400 max-w-xl mx-auto">AGENTS.md, Kiro steering files, Cursor rules — these solve the individual config problem. CruxHive solves the team governance problem.</p>
-      </div>
-
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm border-collapse">
-          <thead>
-            <tr class="border-b border-zinc-800">
-              <th class="text-left py-3 px-4 text-zinc-500 font-medium">Capability</th>
-              <th class="py-3 px-4 text-zinc-500 font-medium text-center">AGENTS.md</th>
-              <th class="py-3 px-4 text-zinc-500 font-medium text-center">Grov</th>
-              <th class="py-3 px-4 text-zinc-500 font-medium text-center">Kiro</th>
-              <th class="py-3 px-4 text-violet-400 font-medium text-center">CruxHive</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-zinc-800/50">
-            <tr class="hover:bg-zinc-900/30 transition-colors">
-              <td class="py-3 px-4 text-zinc-400">Shared team context</td>
-              <td class="py-3 px-4 text-center text-green-400">✓</td>
-              <td class="py-3 px-4 text-center text-green-400">✓</td>
-              <td class="py-3 px-4 text-center text-green-400">✓</td>
-              <td class="py-3 px-4 text-center text-green-400 font-semibold">✓</td>
-            </tr>
-            <tr class="hover:bg-zinc-900/30 transition-colors">
-              <td class="py-3 px-4 text-zinc-400">Human approval workflow</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-green-400 font-semibold">✓</td>
-            </tr>
-            <tr class="hover:bg-zinc-900/30 transition-colors">
-              <td class="py-3 px-4 text-zinc-400">Git versioning + audit trail</td>
-              <td class="py-3 px-4 text-center text-yellow-400">partial</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-green-400 font-semibold">✓</td>
-            </tr>
-            <tr class="hover:bg-zinc-900/30 transition-colors">
-              <td class="py-3 px-4 text-zinc-400">Semantic search (hybrid)</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-yellow-400">✓ (API)</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-green-400 font-semibold">✓ local</td>
-            </tr>
-            <tr class="hover:bg-zinc-900/30 transition-colors">
-              <td class="py-3 px-4 text-zinc-400">Org-layer (cross-project)</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-green-400 font-semibold">✓</td>
-            </tr>
-            <tr class="hover:bg-zinc-900/30 transition-colors">
-              <td class="py-3 px-4 text-zinc-400">Tool-agnostic (MCP)</td>
-              <td class="py-3 px-4 text-center text-yellow-400">partial</td>
-              <td class="py-3 px-4 text-center text-yellow-400">partial</td>
-              <td class="py-3 px-4 text-center text-zinc-600">Kiro only</td>
-              <td class="py-3 px-4 text-center text-green-400 font-semibold">✓</td>
-            </tr>
-            <tr class="hover:bg-zinc-900/30 transition-colors">
-              <td class="py-3 px-4 text-zinc-400">Faithfulness detection</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-green-400 font-semibold">✓ local NLI</td>
-            </tr>
-            <tr class="hover:bg-zinc-900/30 transition-colors">
-              <td class="py-3 px-4 text-zinc-400">Operational data feed</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-zinc-600">✗</td>
-              <td class="py-3 px-4 text-center text-yellow-400 font-semibold">✓ Mozbridge</td>
-            </tr>
-            <tr class="hover:bg-zinc-900/30 transition-colors">
-              <td class="py-3 px-4 text-zinc-400">Zero cloud / self-hostable</td>
-              <td class="py-3 px-4 text-center text-green-400">✓</td>
-              <td class="py-3 px-4 text-center text-yellow-400">partial</td>
-              <td class="py-3 px-4 text-center text-green-400">✓</td>
-              <td class="py-3 px-4 text-center text-green-400 font-semibold">✓</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
-  <!-- Onboarding -->
-  <section class="py-24 px-6 border-t border-zinc-800/50">
-    <div class="max-w-5xl mx-auto">
-      <div class="text-center mb-16">
-        <p class="text-sm text-violet-400 font-mono mb-3">ONBOARDING</p>
-        <h2 class="text-3xl font-bold tracking-tight mb-4">Under 3 minutes for anyone.</h2>
-      </div>
-      <div class="grid sm:grid-cols-3 gap-6">
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-6">
-          <p class="text-xs text-violet-400 font-mono mb-3">SOLO DEVELOPER</p>
-          <p class="text-xs text-zinc-500 mb-4">Solo mode = no approval queue. Auto-approve your own captures.</p>
-          <div class="code-block rounded-lg px-4 py-3 font-mono text-xs text-zinc-400 space-y-1">
-            <p><span class="text-zinc-600">$</span> npm install -g @cruxhive/cli</p>
-            <p><span class="text-zinc-600">$</span> cruxhive init</p>
-            <p><span class="text-zinc-600">$</span> cruxhive solo</p>
-            <p><span class="text-zinc-600">$</span> cruxhive doctor   <span class="text-zinc-600"># verify</span></p>
-          </div>
-        </div>
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-6">
-          <p class="text-xs text-violet-400 font-mono mb-3">NEW TEAM MEMBER</p>
-          <p class="text-xs text-zinc-500 mb-4">Repo already has CruxHive. Full context in under 60 seconds.</p>
-          <div class="code-block rounded-lg px-4 py-3 font-mono text-xs text-zinc-400 space-y-1">
-            <p><span class="text-zinc-600">$</span> git clone ...</p>
-            <p><span class="text-zinc-600">$</span> cruxhive index</p>
-            <p class="text-green-400">✓ 142 entries indexed</p>
-          </div>
-        </div>
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-6">
-          <p class="text-xs text-violet-400 font-mono mb-3">MULTI-PROJECT VIEW</p>
-          <p class="text-xs text-zinc-500 mb-4">Cross-project rollup with KPIs, search, gaps.</p>
-          <div class="code-block rounded-lg px-4 py-3 font-mono text-xs text-zinc-400 space-y-1">
-            <p><span class="text-zinc-600">$</span> cruxhive ui --workspace</p>
-            <p><span class="text-zinc-600">$</span> cruxhive search --workspace <span class="text-violet-300">"auth"</span></p>
-            <p><span class="text-zinc-600">$</span> cruxhive digest --compare</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Open core -->
-  <section class="py-24 px-6 border-t border-zinc-800/50">
-    <div class="max-w-4xl mx-auto">
-      <div class="text-center mb-12">
-        <p class="text-sm text-violet-400 font-mono mb-3">OPEN CORE</p>
-        <h2 class="text-3xl font-bold tracking-tight mb-4">Free and open. Forever.</h2>
-        <p class="text-zinc-400 max-w-xl mx-auto">The full knowledge layer is MIT licensed. Mozbridge adds operational context — deploy failures, build flakiness, secret expiry — automatically fed from your deployment platform.</p>
-      </div>
-      <div class="grid sm:grid-cols-2 gap-6">
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-6">
-          <div class="flex items-center gap-2 mb-4">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-            <h3 class="font-semibold">CruxHive OSS</h3>
-            <span class="ml-auto text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full">MIT</span>
-          </div>
-          <ul class="text-sm text-zinc-400 space-y-2">
-            <li class="flex gap-2"><span class="text-green-400">✓</span> Local MCP server + hybrid search</li>
-            <li class="flex gap-2"><span class="text-green-400">✓</span> Human approval workflow</li>
-            <li class="flex gap-2"><span class="text-green-400">✓</span> NLI faithfulness detection</li>
-            <li class="flex gap-2"><span class="text-green-400">✓</span> Three-tier model (personal/project/org)</li>
-            <li class="flex gap-2"><span class="text-green-400">✓</span> Multi-tool adapters + web UI</li>
-            <li class="flex gap-2"><span class="text-green-400">✓</span> Knowledge health metrics</li>
-          </ul>
-        </div>
-        <div class="gradient-border rounded-xl p-6">
-          <div class="flex items-center gap-2 mb-4">
-            <div class="w-4 h-4 rounded bg-violet-500"></div>
-            <h3 class="font-semibold">CruxHive + Mozbridge</h3>
-            <span class="ml-auto text-xs bg-violet-500/20 text-violet-400 px-2 py-0.5 rounded-full">Platform</span>
-          </div>
-          <ul class="text-sm text-zinc-400 space-y-2">
-            <li class="flex gap-2"><span class="text-violet-400">+</span> Everything in OSS</li>
-            <li class="flex gap-2"><span class="text-violet-400">+</span> Operational context feed (deploy failures, build flakiness, secret expiry)</li>
-            <li class="flex gap-2"><span class="text-violet-400">+</span> Cloud sync + managed RBAC</li>
-            <li class="flex gap-2"><span class="text-violet-400">+</span> Multi-tenant org management</li>
-            <li class="flex gap-2"><span class="text-violet-400">+</span> AI gets deploy context automatically — no human proposal needed</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Get started -->
-  <section id="start" class="py-24 px-6 border-t border-zinc-800/50">
-    <div class="max-w-4xl mx-auto">
-      <div class="text-center mb-12">
-        <h2 class="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
-          Get CruxHive.
-        </h2>
-        <p class="text-zinc-400 max-w-xl mx-auto">No account. No cloud. No API key. Works with the AI tools you already use.</p>
-      </div>
-
-      <div class="grid sm:grid-cols-2 gap-6 mb-12">
-        <!-- npm — primary install path -->
-        <div class="gradient-border rounded-xl p-6">
-          <div class="flex items-center gap-2 mb-1">
-            <span class="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-mono">available now</span>
-            <a href="https://www.npmjs.com/package/@cruxhive/cli" class="text-xs text-zinc-500 hover:text-zinc-300 ml-auto">@cruxhive/cli ↗</a>
-          </div>
-          <h3 class="font-semibold text-lg mb-2">npm install (recommended)</h3>
-          <p class="text-sm text-zinc-500 mb-4">One-command setup. Wires 5 AI tools, registers MCP, creates <code class="text-xs bg-zinc-800 px-1 rounded">.llm/</code>, installs hooks, syncs <code class="text-xs bg-zinc-800 px-1 rounded">.gitignore</code>. Python server installed automatically via <code class="text-xs bg-zinc-800 px-1 rounded">uv</code> or <code class="text-xs bg-zinc-800 px-1 rounded">pip</code>.</p>
-          <div class="code-block rounded-lg px-4 py-3 font-mono text-xs text-zinc-400 space-y-1">
-            <p><span class="text-zinc-600">$</span> npm install -g @cruxhive/cli</p>
-            <p><span class="text-zinc-600">$</span> cd your-project</p>
-            <p><span class="text-zinc-600">$</span> cruxhive init</p>
-            <p><span class="text-zinc-600">$</span> cruxhive solo   <span class="text-zinc-600"># single-dev mode</span></p>
-            <p class="text-green-400">✓ ready · run `cruxhive ui` for dashboard</p>
-          </div>
-        </div>
-
-        <!-- pip / uv — direct install -->
-        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-6">
-          <div class="flex items-center gap-2 mb-1">
-            <span class="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-mono">available now</span>
-            <a href="https://pypi.org/project/cruxhive-mcp/" class="text-xs text-zinc-500 hover:text-zinc-300 ml-auto">cruxhive-mcp ↗</a>
-          </div>
-          <h3 class="font-semibold text-lg mb-2">Python-only (for AI tool config)</h3>
-          <p class="text-sm text-zinc-500 mb-4">Just want the MCP server? Skip the npm CLI. Install with <code class="text-xs bg-zinc-800 px-1 rounded">uv</code> (recommended) or <code class="text-xs bg-zinc-800 px-1 rounded">pip</code>, then point your AI tool's <code class="text-xs bg-zinc-800 px-1 rounded">.mcp.json</code> at <code class="text-xs bg-zinc-800 px-1 rounded">cruxhive-mcp</code>.</p>
-          <div class="code-block rounded-lg px-4 py-3 font-mono text-xs text-zinc-400 space-y-1">
-            <p><span class="text-zinc-600">$</span> uv tool install cruxhive-mcp</p>
-            <p class="mt-1 text-zinc-600"># .mcp.json:</p>
-            <p>  <span class="text-violet-400">"cruxhive"</span>: { <span class="text-violet-400">"command"</span>: <span class="text-green-300">"cruxhive-mcp"</span> }</p>
-            <p class="mt-1 text-green-400">✓ 11 MCP tools exposed</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Roadmap progress (everything Phase 1-4 is shipped) -->
-      <div class="bg-zinc-900/40 border border-zinc-800 rounded-xl p-6 mb-10">
-        <p class="text-xs text-zinc-500 font-mono mb-4">SHIPPED</p>
-        <div class="space-y-3">
-          <div class="flex items-center gap-3">
-            <div class="w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center flex-shrink-0">
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-            <span class="text-sm text-zinc-300">Phase 1 — Canonical context + MCP skill layer</span>
-          </div>
-          <div class="flex items-center gap-3">
-            <div class="w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center flex-shrink-0">
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-            <span class="text-sm text-zinc-300">Phase 2 — Multi-tool bootstrap (Cursor, Windsurf, Gemini, OpenCode)</span>
-          </div>
-          <div class="flex items-center gap-3">
-            <div class="w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center flex-shrink-0">
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-            <span class="text-sm text-zinc-300">Phase 3 — OSS extraction · npm + PyPI publish</span>
-          </div>
-          <div class="flex items-center gap-3">
-            <div class="w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center flex-shrink-0">
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-            <span class="text-sm text-zinc-300">Phase 4 — Search · approval workflow · NLI faithfulness · web UI</span>
-          </div>
-          <div class="flex items-center gap-3">
-            <div class="w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center flex-shrink-0">
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-            <span class="text-sm text-zinc-300">Memory intelligence — entity search · recency · decay · ephemeral</span>
-          </div>
-          <div class="flex items-center gap-3">
-            <div class="w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center flex-shrink-0">
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-            <span class="text-sm text-zinc-300">Observability — session log · stats · workspace dashboard · digest --compare</span>
-          </div>
-          <div class="flex items-center gap-3">
-            <div class="w-5 h-5 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center flex-shrink-0">
-              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </div>
-            <span class="text-sm text-zinc-300">Solo mode · cross-project search · direnv coverage for Cursor/Windsurf/Gemini</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-        <a href="https://github.com/cruxhive/cruxhive" class="w-full sm:w-auto flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 text-white px-6 py-3 rounded-lg font-medium transition-colors">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-          Star on GitHub
-        </a>
-        <a href="https://mozbridge.com" class="w-full sm:w-auto flex items-center justify-center gap-2 border border-zinc-700 hover:border-zinc-500 text-zinc-300 px-6 py-3 rounded-lg font-medium transition-colors">
-          CruxHive + Mozbridge →
-        </a>
-      </div>
-    </div>
-  </section>
-
-  <!-- Footer -->
-  <footer class="border-t border-zinc-800/50 py-10 px-6">
-    <div class="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-      <div class="flex items-center gap-2">
-        <div class="w-5 h-5 rounded bg-violet-500 flex items-center justify-center">
-          <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M2 3h10M2 7h7M2 11h5" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>
-        </div>
-        <span class="text-sm font-medium text-zinc-400">cruxhive</span>
-        <span class="text-zinc-700 text-sm">·</span>
-        <span class="text-xs text-zinc-600">MIT License</span>
-      </div>
-      <p class="text-xs text-zinc-600">
-        Built by <a href="https://github.com/jessin01" class="text-zinc-500 hover:text-zinc-300 transition-colors">Jessin Palackal</a> · Powered by <a href="https://mozbridge.com" class="text-zinc-500 hover:text-zinc-300 transition-colors">Mozbridge</a>
+<!-- ─── STORY 1 ─────────────────────────────────────────────────── -->
+<section class="story">
+  <div class="container row">
+    <div>
+      <span class="num">02 / Tool-agnostic</span>
+      <h3>Every AI tool reads from the same place.</h3>
+      <p>
+        <strong>One canonical <code>.llm/CONTEXT.md</code></strong> per project. CruxHive symlinks
+        <code>CLAUDE.md</code>, <code>AGENT.md</code>, <code>.cursor/rules/</code>,
+        <code>.windsurfRules</code>, and <code>GEMINI.md</code> at it. Switch tools mid-day — same context.
       </p>
-      <div class="flex items-center gap-5 text-xs text-zinc-600">
-        <a href="https://github.com/cruxhive/cruxhive" class="hover:text-zinc-400 transition-colors">GitHub</a>
-        <a href="guide.html" class="hover:text-zinc-400 transition-colors">Docs</a>
-        <a href="https://mozbridge.com" class="hover:text-zinc-400 transition-colors">Mozbridge</a>
+      <p>
+        For tools without their own session hook (Cursor, Windsurf, Gemini), <code>cruxhive direnv</code> wires
+        a per-project <code>.envrc</code> so every shell entry is logged correctly.
+      </p>
+      <div class="real-line">
+        <span><b>5</b> AI tools</span>
+        <span><b>1</b> source of truth</span>
+        <span><b>0</b> drift</span>
       </div>
     </div>
-  </footer>
+    <div class="panel">
+      <div class="head">your-project/</div>
+      <div class="row-2"><span>CLAUDE.md</span>             <span class="mute">→ .llm/CONTEXT.md</span></div>
+      <div class="row-2"><span>AGENT.md</span>              <span class="mute">→ .llm/CONTEXT.md</span></div>
+      <div class="row-2"><span>.cursor/rules/cruxhive.mdc</span><span class="mute">→ .llm/CONTEXT.md</span></div>
+      <div class="row-2"><span>.windsurfRules</span>        <span class="mute">→ .llm/CONTEXT.md</span></div>
+      <div class="row-2"><span>GEMINI.md</span>             <span class="mute">→ .llm/CONTEXT.md</span></div>
+      <hr/>
+      <div class="row-2"><span>.mcp.json</span>             <span class="amber">cruxhive-mcp</span></div>
+      <div class="row-2"><span>.claude/commands/</span>     <span class="mute">/radar  /next-slice  /extract</span></div>
+      <div class="row-2"><span>.opencode/commands/</span>   <span class="mute">/radar  /next-slice  /extract</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── STORY 2 ─────────────────────────────────────────────────── -->
+<section class="story alt">
+  <div class="container row">
+    <div>
+      <span class="num">03 / Trust gate</span>
+      <h3>AI proposes. Humans approve. Knowledge compounds.</h3>
+      <p>
+        The single rule: <strong>no AI tool writes to the knowledge base without you saying yes.</strong>
+        <code>/extract</code> distills a session into candidates, <code>/summarize</code> into a structured
+        research entry — all queued for one-keystroke review.
+      </p>
+      <p>
+        Solo? Run <code>cruxhive solo</code> once — your own proposals auto-approve.
+        Stay in control without the bureaucracy of a team approval queue.
+      </p>
+      <div class="real-line">
+        <span>NLI conflict detection at review time</span>
+        <span>·</span>
+        <span>confidence decay over age</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="head">.llm/pending/ · awaiting review</div>
+      <div class="row-2"><span>constraint_auth.md</span>         <span class="amber">[constraint]</span></div>
+      <div class="row-2"><span class="mute">  topic: oauth · age: 1h</span></div>
+      <div class="row-2"><span class="mute">  source: ai-proposed (/extract)</span></div>
+      <hr/>
+      <div class="row-2"><span>decision_db.md</span>             <span class="amber">[decision]</span></div>
+      <div class="row-2"><span class="mute">  topic: database · age: 3h</span></div>
+      <div class="row-2"><span class="red">  ⚠ conflicts with .llm/decisions/orm.md</span></div>
+      <hr/>
+      <div class="row-2"><span class="green">[a]pprove  [r]eject  [s]kip  [e]dit</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── STORY 3 — workspace ────────────────────────────────────── -->
+<section class="story">
+  <div class="container row">
+    <div>
+      <span class="num">04 / Cross-project</span>
+      <h3>One workspace. Every project searchable from every other.</h3>
+      <p>
+        Working in <code>mozbridge</code>, wondering <em>"how did I solve auth in orphimuse?"</em> —
+        <code>cruxhive search --workspace "auth"</code> hits every project's index and merges results.
+      </p>
+      <p>
+        Or open <code>cruxhive ui --workspace</code> for a live dashboard with the 5 KPIs that matter:
+        hit rate, gaps, queue age, decay, sessions. Trend deltas with <code>cruxhive digest --compare</code>.
+      </p>
+      <div class="real-line">
+        <span>localhost:3847 · MCP <code>context_workspace_search</code> · JSON-exportable</span>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi">
+        <div class="label">Hit rate</div>
+        <div class="value"><em>74%</em></div>
+        <div class="sub">↑ +6 vs 7d ago</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Gaps (30d)</div>
+        <div class="value">3</div>
+        <div class="sub">↓ -2 vs 7d ago</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Pending</div>
+        <div class="value">2</div>
+        <div class="sub">oldest 4d</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Decayed</div>
+        <div class="value">8</div>
+        <div class="sub">6% of 124</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── INSTALL ─────────────────────────────────────────────────── -->
+<section id="install" class="install-section">
+  <div class="container">
+    <h2>Install in 30 seconds.</h2>
+    <p class="sub">Two packages. Both public. MIT. Choose either.</p>
+
+    <div class="install-grid">
+      <a class="install-card" href="https://www.npmjs.com/package/@cruxhive/cli">
+        <div class="label">RECOMMENDED · npm</div>
+        <div class="pkg">@cruxhive/cli</div>
+        <p class="desc">Bootstraps everything. Installs the Python MCP server, wires 5 AI tools, sets up hooks, gitignore. Stable 0.12.</p>
+        <div class="cmd"><span class="prompt">$</span> npm install -g @cruxhive/cli</div>
+      </a>
+      <a class="install-card" href="https://pypi.org/project/cruxhive-mcp/">
+        <div class="label">DIRECT · PyPI</div>
+        <div class="pkg">cruxhive-mcp</div>
+        <p class="desc">Just the MCP server. Point your AI tool's <code>.mcp.json</code> at <code>cruxhive-mcp</code>. Stable 0.11.</p>
+        <div class="cmd"><span class="prompt">$</span> uv tool install cruxhive-mcp</div>
+      </a>
+    </div>
+
+    <div class="roadmap">
+      <div class="item"><span class="check">✓</span><span><b>Phase 1–4</b> · context layer · multi-tool bootstrap · MCP + SQLite · approval workflow + NLI faithfulness + web UI</span></div>
+      <div class="item"><span class="check">✓</span><span><b>Memory intelligence</b> · entity-aware search · recency boost · confidence decay · ephemeral entries</span></div>
+      <div class="item"><span class="check">✓</span><span><b>Observability</b> · session log · workspace dashboard · digest with <code>--compare</code> · 14 CLI commands</span></div>
+      <div class="item"><span class="check">✓</span><span><b>Solo mode + cross-project search</b> · direnv coverage for Cursor / Windsurf / Gemini</span></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container row">
+    <span>cruxhive-mcp <b style="color:var(--accent)">0.11</b> · @cruxhive/cli <b style="color:var(--accent)">0.12</b> · 32 tests · MIT · 0 cloud</span>
+    <div class="links">
+      <a href="https://github.com/cruxhive/cruxhive">GitHub</a>
+      <a href="guide.html">Docs</a>
+      <a href="https://pypi.org/project/cruxhive-mcp/">PyPI</a>
+      <a href="https://www.npmjs.com/package/@cruxhive/cli">npm</a>
+    </div>
+  </div>
+</footer>
 
 </body>
 </html>
