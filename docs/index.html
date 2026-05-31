@@ -265,6 +265,47 @@
     }
     .install-card .cmd .prompt{color:var(--fg-mute);user-select:none}
 
+    /* ── After install — first-day quickstart ─────────────────────── */
+    .after-install{
+      max-width:840px;margin:3rem auto 0;text-align:left;
+      background:var(--bg-card);border:1px solid var(--line);
+      border-radius:10px;padding:1.6rem 1.8rem;
+    }
+    .after-install .head{
+      font-family:var(--mono);font-size:.7rem;color:var(--accent);
+      text-transform:uppercase;letter-spacing:.08em;margin-bottom:.85rem;
+      display:flex;justify-content:space-between;align-items:baseline;
+    }
+    .after-install .head .right{color:var(--fg-mute);font-weight:400}
+    .after-install h3{font-size:1.25rem;font-weight:600;letter-spacing:-.02em;margin-bottom:1.3rem;color:var(--fg)}
+    .step{display:grid;grid-template-columns:1.6rem 1fr;gap:.85rem;margin-bottom:.95rem}
+    .step:last-of-type{margin-bottom:0}
+    .step .num{
+      font-family:var(--mono);font-size:.8rem;color:var(--accent);
+      background:var(--bg);border:1px solid var(--accent);
+      border-radius:50%;width:1.6rem;height:1.6rem;
+      display:flex;align-items:center;justify-content:center;
+      flex-shrink:0;font-weight:500;
+    }
+    .step .body{padding-top:.05rem}
+    .step .body .what{font-size:.95rem;color:var(--fg);margin-bottom:.25rem;font-weight:500}
+    .step .body .what code{
+      font-family:var(--mono);font-size:.85em;color:var(--accent);
+      background:var(--bg);padding:.1rem .4rem;border-radius:4px;border:1px solid var(--line);
+    }
+    .step .body .why{font-size:.83rem;color:var(--fg-dim);line-height:1.5}
+    .step .body .why code{font-family:var(--mono);font-size:.88em;color:var(--fg)}
+    .after-install .next-cta{
+      margin-top:1.4rem;padding-top:1.2rem;border-top:1px solid var(--line);
+      display:flex;flex-wrap:wrap;gap:.85rem 1.6rem;align-items:center;
+      font-family:var(--mono);font-size:.78rem;color:var(--fg-dim);
+    }
+    .after-install .next-cta a{
+      color:var(--accent);border-bottom:1px dotted var(--accent);
+      padding-bottom:1px;
+    }
+    .after-install .next-cta a:hover{filter:brightness(1.2)}
+
     .roadmap{
       max-width:760px;margin:2.5rem auto 0;text-align:left;
       font-family:var(--mono);font-size:.78rem;color:var(--fg-dim);
@@ -616,6 +657,63 @@
         <p class="desc">Just the MCP server. Point your AI tool's <code>.mcp.json</code> at <code>cruxhive-mcp</code>. Stable 0.12.</p>
         <div class="cmd"><span class="prompt">$</span> uv tool install cruxhive-mcp</div>
       </a>
+    </div>
+
+    <!-- After-install quickstart — closes the "what do I do now?" gap -->
+    <div class="after-install">
+      <div class="head">
+        <span>After install</span>
+        <span class="right">~5 min · then 2 min/day</span>
+      </div>
+      <h3>Your first day with CruxHive</h3>
+
+      <div class="step">
+        <div class="num">1</div>
+        <div class="body">
+          <div class="what">Bootstrap a project: <code>cd your-project &amp;&amp; cruxhive init</code></div>
+          <div class="why">Wires 5 AI tools (Claude Code / Cursor / OpenCode / Windsurf / Gemini), installs hooks, creates <code>.llm/CONTEXT.md</code> and <code>.gitignore</code> entries. Idempotent — safe to re-run.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="num">2</div>
+        <div class="body">
+          <div class="what">Edit <code>.llm/CONTEXT.md</code> — describe your project</div>
+          <div class="why">Stack, key paths, conventions, the rules you'd tell a new hire. Every AI tool reads this at session start. This is where 80% of the value comes from. ~5 minutes.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="num">3</div>
+        <div class="body">
+          <div class="what">Solo dev? Run <code>cruxhive solo --name "you"</code></div>
+          <div class="why">Skips the human-approval queue. Your own proposals (from <code>/extract</code>, <code>/summarize</code>, <code>cruxhive propose</code>) land as already-approved. Disable later with <code>cruxhive solo --disable</code> when you add a teammate.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="num">4</div>
+        <div class="body">
+          <div class="what">End-of-session habit: type <code>/extract</code> in Claude Code or OpenCode</div>
+          <div class="why">Distills the conversation into knowledge entries. The next session — whatever AI tool — starts knowing what this one learned. Run <code>/summarize</code> for a single structured research entry instead of N candidates.</div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="num">5</div>
+        <div class="body">
+          <div class="what">Find anything later: <code>cruxhive search "auth"</code></div>
+          <div class="why">Searches the current project. Add <code>--workspace</code> to search across every CruxHive-initialized project on your machine. Use <code>cruxhive ui</code> for the visual dashboard, <code>cruxhive digest</code> weekly to see what's growing.</div>
+        </div>
+      </div>
+
+      <div class="next-cta">
+        <span>Stuck or want detail?</span>
+        <a href="guide.html#workflow">Daily workflow →</a>
+        <a href="guide.html#cli">Full CLI reference →</a>
+        <a href="guide.html">All docs →</a>
+        <span style="margin-left:auto">Verify setup: <code style="color:var(--fg)">cruxhive doctor</code></span>
+      </div>
     </div>
 
     <div class="roadmap">
