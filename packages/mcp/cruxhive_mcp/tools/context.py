@@ -420,7 +420,7 @@ def register(mcp: FastMCP) -> None:
         Idempotent — safe to call multiple times per session.
 
         Args:
-            project_root: Absolute path to the mozbridge project root. Defaults to cwd.
+            project_root: Absolute path to the workspace project root. Defaults to cwd.
         """
         root = _root(project_root)
         script = _find_sync_script(root)

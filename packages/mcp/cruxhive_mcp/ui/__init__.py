@@ -879,7 +879,7 @@ async function load() {
         <p>You have <strong>${agg.total_entries}</strong> indexed entries across <strong>${agg.projects}</strong> projects, but no SessionStart event has fired in the last ${days} days. This usually means your existing AI sessions started before the hook was wired — open a new Claude Code or OpenCode session in any project and the sessions counter will start moving.</p>
         <p><strong>If sessions count up but searches stay at 0:</strong> the AI tool is loading <code>.llm/CONTEXT.md</code> as static context but never invoking the MCP <code>context_*</code> tools. Use slash commands (<code>/radar</code>, <code>/extract</code>, <code>/review</code>) or ask the AI explicitly to search the CruxHive knowledge base.</p>
         <div class="actions">
-          <span class="pill">cd ~/Projects_Local/Development/mozbridge && claude</span>
+          <span class="pill">cd your-project && claude</span>
           <span class="pill">/radar  · /next-slice  · /extract</span>
         </div>
       </div>`;

@@ -28,7 +28,7 @@ async function sync(_args) {
   const cwd = process.cwd();
   console.log(`\n\x1b[1mcruxhive sync\x1b[0m`);
 
-  // Try workspace-level sync script first (mozbridge pattern)
+  // Try workspace-level sync script first
   const script = findSyncScript(cwd);
   if (script) {
     const r = spawnSync(script, [], { cwd, stdio: "inherit" });

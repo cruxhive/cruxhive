@@ -184,12 +184,12 @@ def test_fresh_ephemeral_entry_stays_indexed(project):
 # ── Entity extraction ─────────────────────────────────────────────────────────
 
 def test_extract_entities_catches_common_patterns():
-    text = ("we use context_search and call POST to api.mozbridge.com on "
-            "host 91.99.212.250. See plans/auth.md for the AUTH_TOKEN config.")
+    text = ("we use context_search and call POST to api.example.com on "
+            "host 10.20.30.40. See plans/auth.md for the AUTH_TOKEN config.")
     entities = store.extract_entities(text)
     assert "context_search" in entities
-    assert "91.99.212.250" in entities
-    assert "api.mozbridge.com" in entities
+    assert "10.20.30.40" in entities
+    assert "api.example.com" in entities
     assert "auth.md" in entities
     assert "AUTH_TOKEN" in entities
 
@@ -201,11 +201,11 @@ def test_entity_search_boost_surfaces_matching_entry(project):
            "source: human\napproved_by: jess\n---\n\nGeneric note about deploying.\n")
     _write(project / ".llm" / "context" / "b.md",
            "---\ntype: fact\ntopic: hosts\nvalid_at: 2026-05-29\nconfidence: high\n"
-           "source: human\napproved_by: jess\n---\n\nServer at 91.99.212.250 runs mozbridge.\n")
+           "source: human\napproved_by: jess\n---\n\nServer at 10.20.30.40 runs the API.\n")
     store.index(str(project))
     conn = store.connect(str(project))
     bm25 = store.search_bm25(conn, "deploying", 10)
-    fused = store.rrf_fuse(bm25, [], conn=conn, query="91.99.212.250 deploying")
+    fused = store.rrf_fuse(bm25, [], conn=conn, query="10.20.30.40 deploying")
     conn.close()
     # b.md should rank above a.md when query mentions the IP, even though
     # bm25 alone wouldn't pull it.

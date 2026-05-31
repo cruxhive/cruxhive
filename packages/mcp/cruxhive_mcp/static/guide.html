@@ -315,8 +315,8 @@
           <p><span class="text-violet-400">valid_at</span>: <span class="text-green-300">2026-05-27</span>      <span class="text-zinc-700"># when this became true</span></p>
           <p><span class="text-violet-400">invalid_at</span>: <span class="text-zinc-500">~</span>            <span class="text-zinc-700"># null = still valid; set to deprecate</span></p>
           <p><span class="text-violet-400">confidence</span>: <span class="text-green-300">high</span>          <span class="text-zinc-700"># high|medium|low</span></p>
-          <p><span class="text-violet-400">source</span>: <span class="text-green-300">human</span>            <span class="text-zinc-700"># human|ai-proposed|mozbridge-feed</span></p>
-          <p><span class="text-violet-400">approved_by</span>: <span class="text-green-300">jessin</span>      <span class="text-zinc-700"># git username; ~ = pending</span></p>
+          <p><span class="text-violet-400">source</span>: <span class="text-green-300">human</span>            <span class="text-zinc-700"># human|ai-proposed|ephemeral</span></p>
+          <p><span class="text-violet-400">approved_by</span>: <span class="text-green-300">alice</span>       <span class="text-zinc-700"># git username; ~ = pending</span></p>
           <p class="text-zinc-600">---</p>
           <p class="mt-2 text-zinc-400"></p>
           <p class="text-zinc-400">Never store JWT tokens in localStorage — XSS vulnerability.</p>
@@ -374,7 +374,7 @@
           <p class="text-zinc-500 text-xs mt-1 ml-4">» [constraint] auth  —  never store JWT in localStorage</p>
           <p class="text-zinc-500 text-xs ml-4">  > Never store JWT tokens in localStorage — XSS risk…</p>
           <p class="text-zinc-500 text-xs ml-4">  [a]pprove / [r]eject / [s]kip: <span class="text-green-400">a</span></p>
-          <p class="text-zinc-500 text-xs ml-4">  Your name: <span class="text-green-400">jessin</span></p>
+          <p class="text-zinc-500 text-xs ml-4">  Your name: <span class="text-green-400">alice</span></p>
           <p class="text-green-400 text-xs ml-4">  ✓ Approved</p>
         </div>
 
@@ -727,7 +727,8 @@
       <div class="flex items-center gap-5 text-xs text-zinc-600">
         <a href="index.html" class="hover:text-zinc-400 transition-colors">Landing</a>
         <a href="https://github.com/cruxhive/cruxhive" class="hover:text-zinc-400 transition-colors">GitHub</a>
-        <a href="https://mozbridge.com" class="hover:text-zinc-400 transition-colors">Mozbridge</a>
+        <a href="https://pypi.org/project/cruxhive-mcp/" class="hover:text-zinc-400 transition-colors">PyPI</a>
+        <a href="https://www.npmjs.com/package/@cruxhive/cli" class="hover:text-zinc-400 transition-colors">npm</a>
       </div>
     </div>
   </footer>

@@ -102,7 +102,7 @@ topic: auth
 valid_at: 2026-05-29
 invalid_at: ~
 confidence: high        # low | medium | high
-source: human           # human | ai-proposed | mozbridge-feed
+source: human           # human | ai-proposed | ephemeral
 approved_by: jane       # or ~ for pending
 ---
 

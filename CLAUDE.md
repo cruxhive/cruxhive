@@ -2,9 +2,9 @@
 
 ## What this is
 
-CruxHive is a team AI knowledge governance layer — an OSS tool being extracted from Mozbridge's internal `ai-toolkit/` after Phase 1+2 are proven.
+CruxHive is a team AI knowledge governance layer. One human-curated knowledge base, every AI tool reads from it: Claude Code, OpenCode, Cursor, Windsurf, Gemini CLI. Local SQLite, MIT licensed, zero cloud dependency.
 
-**Status**: Pre-release. Dogfooding inside `Development/mozbridge/` across 6 workspace projects before extraction.
+**Status**: Published. `cruxhive-mcp@0.11.0` on PyPI · `@cruxhive/cli@0.12.0` on npm.
 
 ## Repo layout
 
@@ -12,46 +12,57 @@ CruxHive is a team AI knowledge governance layer — an OSS tool being extracted
 cruxhive/
 ├── docs/
 │   ├── index.html     — landing page (cruxhive.com via GitHub Pages)
-│   ├── landing.html   — same content (canonical source)
-│   ├── CNAME          — cruxhive.com
-│   └── PLAN.md        — full architecture + phase plan
+│   ├── guide.html     — full user-facing guide (also bundled in wheel)
+│   ├── logo.svg       — brand mark
+│   └── favicon.svg
 ├── packages/
-│   ├── cli/           — @cruxhive/cli npm package
+│   ├── cli/           — @cruxhive/cli npm package (thin wrapper)
 │   │   ├── package.json
 │   │   ├── bin/cruxhive.js
-│   │   └── lib/{init,sync,health}.js
-│   └── mcp/           — cruxhive-mcp PyPI package
+│   │   └── lib/{init,sync,health,...}.js
+│   └── mcp/           — cruxhive-mcp PyPI package (the real engine)
 │       ├── pyproject.toml
 │       ├── cruxhive_mcp/server.py
-│       └── cruxhive_mcp/tools/context.py
-├── memory/            — CruxHive session memory
+│       ├── cruxhive_mcp/store.py            — SQLite + FTS5 + entity boost
+│       ├── cruxhive_mcp/events.py           — observability log
+│       ├── cruxhive_mcp/workspace.py        — cross-project rollup
+│       ├── cruxhive_mcp/tools/knowledge.py  — context_search/propose/...
+│       ├── cruxhive_mcp/ui/__init__.py      — FastAPI dashboard
+│       └── tests/                           — 32 pytest tests
+├── scripts/
+│   └── sync-docs.sh   — copy docs/guide.html into the wheel before publish
+├── .llm/              — this repo's own knowledge base (eats own dog food)
 ├── README.md
-└── CLAUDE.md
+└── CLAUDE.md          — this file
 ```
 
-## Key decisions (from docs/PLAN.md)
+## Key architecture decisions
 
-- **Storage**: SQLite FTS5 (BM25) + sqlite-vec (Nomic Embed v1.5) + RRF k=60 hybrid search
-- **Approval gate**: Humans always approve AI-proposed entries — AI only proposes, never writes directly
-- **Packaging**: npm thin wrapper (`npx cruxhive init`) installs PyPI server via `uv`
-- **Faithfulness**: `cross-encoder/nli-deberta-v3-small` post-session async contradiction detection
-- **Tiers**: Personal (`~/.cruxhive/`) → Project (`.llm/`) → Org (shared git remote)
+- **Storage**: SQLite FTS5 BM25 + optional sqlite-vec (Nomic Embed v1.5) + RRF k=60 hybrid search, plus entity-aware boost (regex extraction at index time) and recency banding.
+- **Approval gate**: AI tools never write directly. They call `context_propose` → entry lands in `.llm/pending/` → human runs `cruxhive review`. Solo developers can run `cruxhive solo` to auto-approve own proposals.
+- **Packaging**: npm thin wrapper (`@cruxhive/cli`) drives the Python server (`cruxhive-mcp`). `cruxhive init` installs the server via `uv tool install`.
+- **Faithfulness**: optional `cross-encoder/nli-deberta-v3-small` for post-session contradiction detection.
+- **Three tiers**: Personal (`~/.cruxhive/personal/`) → Project (`.llm/`) → Org (shared git remote or auto-synced from a workspace memory dir).
 
-## Where the active work lives
+## Common dev tasks
 
-Phase 1+2 (complete):
-- `Development/mozbridge/ai-toolkit/` — skill manifest, bootstrap.sh, adapters, MCP tools (source of truth)
-- `Development/memory/` — org-layer context prototype
-- `Development/mozbridge/.llm/plans/agentfile.md` — authoritative plan (mirrored here as docs/PLAN.md)
+| Task | Command |
+|------|---------|
+| Run tests | `cd packages/mcp && uv run --with pytest --with mcp pytest -q` |
+| Build wheel | `cd packages/mcp && rm -rf dist/ && uv build` |
+| Publish to PyPI | `uv publish --token "$(awk '/password/{print $3}' ~/.pypirc)"` |
+| Build + publish npm | `cd packages/cli && npm publish --access=public` |
+| Sync docs into wheel | `scripts/sync-docs.sh` (runs before each `uv build`) |
+| Reinstall locally | `uv tool install --editable "packages/mcp[ui]" --force` |
+| Smoke test UI | `cruxhive-ui --workspace --port 3847` |
 
-Phase 3+ (this repo is now the primary workspace):
-- `packages/mcp/` — standalone `cruxhive-mcp` Python package (extracted from mozbridge MCP)
-- `packages/cli/` — `@cruxhive/cli` npm thin wrapper
-- Publishing: `uv publish packages/mcp` (PyPI) + `npm publish packages/cli` (npm)
+## Versioning
+
+`cruxhive-mcp` (Python) and `@cruxhive/cli` (Node) are versioned independently. Either can be bumped without touching the other. The npm CLI is a thin shell over the Python entry points — if a function moves Python-side, the npm CLI usually doesn't need a release.
 
 ## Links
 
-- cruxhive.com
-- github.com/cruxhive/cruxhive
-- npm: @cruxhive/cli (not yet published)
-- PyPI: cruxhive-mcp (not yet published)
+- Site: https://cruxhive.github.io/cruxhive/ (cruxhive.com once DNS is wired)
+- Repo: https://github.com/cruxhive/cruxhive
+- PyPI: https://pypi.org/project/cruxhive-mcp/
+- npm:  https://www.npmjs.com/package/@cruxhive/cli

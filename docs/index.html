@@ -359,18 +359,18 @@
     <div class="terminal">
       <div class="terminal-bar">
         <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
-        <span class="title">~/mozbridge · cruxhive search --workspace</span>
+        <span class="title">~/projects/backend · cruxhive search --workspace</span>
       </div>
       <div class="terminal-body">
         <span class="prompt">$</span> cruxhive search --workspace <span class="hit">"auth"</span><br/>
         <br/>
         <span class="mute">Searching 8 projects · BM25 + entity + recency …</span><br/>
         <br/>
-        <span class="num">1.</span> <b>mozbridge</b>      <span class="mute">.llm/decisions/auth.md</span>     <span class="ok">match</span><br/>
-        <span class="num">2.</span> <b>orphimusev2</b>    <span class="mute">.llm/plans/logto.md</span>         <span class="ok">match</span><br/>
-        <span class="num">3.</span> <b>Pratios</b>        <span class="mute">.llm/memory/sessions.md</span>     <span class="ok">match</span><br/>
-        <span class="num">4.</span> <b>mozbridge</b>      <span class="mute">.llm/context/identity.md</span>    <span class="hit">entity</span><br/>
-        <span class="num">5.</span> <b>traderdeck</b>     <span class="mute">.llm/plans/oauth-flow.md</span>    <span class="ok">match</span><br/>
+        <span class="num">1.</span> <b>backend</b>       <span class="mute">.llm/decisions/auth.md</span>     <span class="ok">match</span><br/>
+        <span class="num">2.</span> <b>mobile</b>        <span class="mute">.llm/plans/oidc.md</span>          <span class="ok">match</span><br/>
+        <span class="num">3.</span> <b>analytics</b>     <span class="mute">.llm/memory/sessions.md</span>     <span class="ok">match</span><br/>
+        <span class="num">4.</span> <b>backend</b>       <span class="mute">.llm/context/identity.md</span>    <span class="hit">entity</span><br/>
+        <span class="num">5.</span> <b>web-app</b>       <span class="mute">.llm/plans/oauth-flow.md</span>    <span class="ok">match</span><br/>
         <br/>
         <span class="ok">✓</span> <span class="out">5 results across 4 projects · 0.06 s · 124 entries indexed</span><br/>
         <br/>
@@ -560,7 +560,7 @@
       <span class="num">04 / Cross-project</span>
       <h3>One workspace. Every project searchable from every other.</h3>
       <p>
-        Working in <code>mozbridge</code>, wondering <em>"how did I solve auth in orphimuse?"</em> —
+        Working in <code>backend</code>, wondering <em>"how did I solve auth in mobile?"</em> —
         <code>cruxhive search --workspace "auth"</code> hits every project's index and merges results.
       </p>
       <p>

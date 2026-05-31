@@ -11,3 +11,7 @@ dist/
 .llm/cruxhive.db
 .llm/cruxhive.db-shm
 .llm/cruxhive.db-wal
+
+# Internal planning + dev memory — not for public repo
+.llm/
+memory/
