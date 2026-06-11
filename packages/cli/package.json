@@ -1,14 +1,22 @@
 {
   "name": "@cruxhive/cli",
-  "version": "0.12.0",
-  "description": "CruxHive — team AI knowledge governance layer",
+  "version": "0.13.0",
+  "description": "CruxHive \u2014 team AI knowledge governance layer",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cruxhive/cruxhive.git"
   },
   "homepage": "https://cruxhive.com",
-  "keywords": ["ai", "mcp", "context", "knowledge", "claude", "cursor", "llm"],
+  "keywords": [
+    "ai",
+    "mcp",
+    "context",
+    "knowledge",
+    "claude",
+    "cursor",
+    "llm"
+  ],
   "engines": {
     "node": ">=18"
   },

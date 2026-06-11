@@ -1025,6 +1025,112 @@ def search() -> None:
         )
 
 
+def inject() -> None:
+    """cruxhive-inject: UserPromptSubmit hook — auto-retrieve project knowledge.
+
+    Reads the Claude Code / OpenCode UserPromptSubmit JSON payload on stdin,
+    searches the project's .llm/ knowledge base, and prints the top relevant
+    entries to stdout so they are injected into the model's context for that
+    turn. This is the forcing function: retrieval-as-context, not
+    retrieval-as-tool — the model no longer has to *decide* to search.
+
+    Contract: NEVER block or break the prompt. Any error, trivial prompt, or
+    empty result -> exit 0 with no output. Each retrieval is logged to events
+    (client_name='hook') so it surfaces in stats/dashboard.
+    """
+    import json
+    import re
+    import time as _time
+
+    TOP_N = 3
+    MAX_SNIPPET = 220
+
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        return
+
+    prompt = (payload.get("prompt") or "").strip()
+    cwd = payload.get("cwd") or os.getcwd()
+
+    # Skip trivial prompts ("yes", "continue", greetings) — avoid noise + log spam
+    if len(prompt) < 15 or len(re.findall(r"[A-Za-z0-9]", prompt)) < 8:
+        return
+    if not os.path.isdir(os.path.join(cwd, ".llm")):
+        return
+
+    from . import events as _events
+    from . import store as _store
+
+    t0 = _time.perf_counter()
+    # Build a recall-friendly OR query from prompt keywords. A raw full-sentence
+    # FTS5 MATCH implicitly ANDs every token (and trips on punctuation), so prose
+    # prompts match nothing — the #1 reason natural-language retrieval came back empty.
+    _STOP = {
+        "the", "a", "an", "and", "or", "to", "of", "in", "on", "for", "with", "at",
+        "by", "from", "is", "are", "be", "this", "that", "it", "as", "me", "my", "we",
+        "you", "your", "help", "please", "can", "could", "would", "should", "do",
+        "does", "how", "what", "why", "want", "need", "make", "get", "new", "use",
+        "about", "into", "let", "lets", "have", "has", "will",
+    }
+    toks, seen_t = [], set()
+    for t in re.findall(r"[A-Za-z0-9_]+", prompt.lower()):
+        if len(t) >= 3 and t not in _STOP and t not in seen_t:
+            seen_t.add(t)
+            toks.append(t)
+    if not toks:
+        return
+    fts = " OR ".join(f'"{t}"' for t in toks[:12])
+    try:
+        conn = _store.connect(cwd)
+        bm25 = _store.search_bm25(conn, fts, 8)
+        hits = _store.rrf_fuse(bm25, [], conn=conn, query=prompt)[:6]
+        conn.close()
+    except Exception:
+        return
+
+    seen: set[str] = set()
+    picked: list[tuple[str, str, str, str]] = []
+    for h in hits:
+        path = h.get("path") or ""
+        if path == ".llm/CONTEXT.md" or path in seen:  # CONTEXT.md is already loaded
+            continue
+        snippet = re.sub(r"\[([^\[\]\n]{1,40})\]", r"\1", h.get("snippet") or "")
+        snippet = snippet.replace("\n", " ").strip()
+        if not snippet:
+            continue
+        if len(snippet) > MAX_SNIPPET:
+            snippet = snippet[:MAX_SNIPPET] + "…"
+        seen.add(path)
+        label = h.get("topic") or os.path.splitext(os.path.basename(path))[0]
+        picked.append((h.get("type") or "note", label, path, snippet))
+        if len(picked) >= TOP_N:
+            break
+
+    try:
+        _events.set_client("hook", "")
+        _events.log(cwd, "context_search", query=prompt, result_n=len(picked),
+                    ms=int((_time.perf_counter() - t0) * 1000))
+    except Exception:
+        pass
+
+    if not picked:
+        return
+
+    lines = [
+        "<cruxhive-knowledge>",
+        "Relevant prior knowledge auto-retrieved from this project's CruxHive KB "
+        "for the prompt above. Treat any [decision]/[constraint] as binding unless "
+        "the user overrides it; if you act against one, say so explicitly. If a "
+        "relevant decision/constraint is MISSING here, propose it via context_propose.",
+        "",
+    ]
+    for typ, label, path, snippet in picked:
+        lines.append(f"• [{typ}] {label} ({path}): {snippet}")
+    lines.append("</cruxhive-knowledge>")
+    print("\n".join(lines))
+
+
 def reject() -> None:
     """cruxhive-reject: reject a pending entry. Args: <path>"""
     args = sys.argv[1:]

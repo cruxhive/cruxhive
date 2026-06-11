@@ -469,9 +469,48 @@ function wireClaudeSessionStart(cwd) {
   ok(".claude/settings.json SessionStart hook added");
 }
 
+// Forcing function: auto-retrieve KB context on every prompt (retrieval-as-context).
+// Without this, the model rarely *chooses* to call context_search and the KB stays dormant.
+const CLAUDE_INJECT_HOOK = {
+  type: "command",
+  command: "cruxhive-inject 2>/dev/null || true",
+  timeout: 8,
+};
+
+function wireClaudeUserPromptSubmit(cwd) {
+  const settingsPath = join(cwd, ".claude", "settings.json");
+  let cfg = {};
+  if (existsSync(settingsPath)) {
+    try {
+      cfg = JSON.parse(readFileSync(settingsPath, "utf8"));
+    } catch {
+      warn(".claude/settings.json malformed — skipping UserPromptSubmit hook");
+      return;
+    }
+  }
+  cfg.hooks = cfg.hooks || {};
+  cfg.hooks.UserPromptSubmit = cfg.hooks.UserPromptSubmit || [];
+
+  let bucket = cfg.hooks.UserPromptSubmit.find((h) => (h.matcher ?? "") === "");
+  if (!bucket) {
+    bucket = { matcher: "", hooks: [] };
+    cfg.hooks.UserPromptSubmit.push(bucket);
+  }
+  bucket.hooks = bucket.hooks || [];
+  if (bucket.hooks.some((h) => typeof h.command === "string" && h.command.includes("cruxhive-inject"))) {
+    info(".claude/settings.json already invokes cruxhive-inject");
+    return;
+  }
+  bucket.hooks.push(CLAUDE_INJECT_HOOK);
+  mkdirSync(dirname(settingsPath), { recursive: true });
+  writeFileSync(settingsPath, JSON.stringify(cfg, null, 2) + "\n");
+  ok(".claude/settings.json UserPromptSubmit hook added (auto-retrieve)");
+}
+
 function wireAutomationHooks(cwd) {
   wirePostCommit(cwd);
   wireClaudeSessionStart(cwd);
+  wireClaudeUserPromptSubmit(cwd);
   wireOpenCodePlugin(cwd);
 }
 
