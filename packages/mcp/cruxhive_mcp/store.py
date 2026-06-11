@@ -342,7 +342,41 @@ def index(root: str, embedder=None) -> int:
 
 # ── Search ────────────────────────────────────────────────────────────────────
 
+_FTS_STOP = {
+    "the", "a", "an", "and", "or", "to", "of", "in", "on", "for", "with", "at",
+    "by", "from", "is", "are", "be", "this", "that", "it", "as", "me", "my", "we",
+    "you", "your", "help", "please", "can", "could", "would", "should", "do",
+    "does", "how", "what", "why", "want", "need", "make", "get", "new", "use",
+    "about", "into", "let", "lets", "have", "has", "will",
+    # low-signal indefinites/quantifiers — never worth matching on
+    "all", "any", "anything", "anyone", "some", "something", "someone",
+    "thing", "things", "everything", "everyone", "no", "not", "yes",
+}
+
+
+def fts_or_query(raw: str) -> str:
+    """Turn a natural-language query into a recall-friendly FTS5 OR query.
+
+    A raw multi-word string handed to FTS5 MATCH implicitly ANDs every token
+    (and trips on punctuation), so prose queries match nothing — the main
+    reason natural-language retrieval came back empty. Extract content tokens,
+    drop stopwords, and OR the rest; BM25 rank still surfaces the best matches
+    first. Returns "" when nothing usable remains (caller should treat as miss).
+    """
+    import re
+    toks: list[str] = []
+    seen: set[str] = set()
+    for t in re.findall(r"[A-Za-z0-9_]+", (raw or "").lower()):
+        if len(t) >= 2 and t not in _FTS_STOP and t not in seen:
+            seen.add(t)
+            toks.append(t)
+    return " OR ".join(f'"{t}"' for t in toks[:16])
+
+
 def search_bm25(conn: sqlite3.Connection, query: str, n: int = 10) -> list[dict]:
+    match = fts_or_query(query)
+    if not match:
+        return []
     try:
         rows = conn.execute("""
             SELECT e.path, e.type, e.scope, e.topic, e.confidence,
@@ -355,7 +389,7 @@ def search_bm25(conn: sqlite3.Connection, query: str, n: int = 10) -> list[dict]
               AND (e.invalid_at IS NULL OR e.invalid_at IN ('~','null','none',''))
             ORDER BY rank
             LIMIT ?
-        """, (query, n)).fetchall()
+        """, (match, n)).fetchall()
         return [dict(r) for r in rows]
     except Exception:
         return []

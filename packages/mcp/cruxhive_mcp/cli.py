@@ -1063,27 +1063,11 @@ def inject() -> None:
     from . import store as _store
 
     t0 = _time.perf_counter()
-    # Build a recall-friendly OR query from prompt keywords. A raw full-sentence
-    # FTS5 MATCH implicitly ANDs every token (and trips on punctuation), so prose
-    # prompts match nothing — the #1 reason natural-language retrieval came back empty.
-    _STOP = {
-        "the", "a", "an", "and", "or", "to", "of", "in", "on", "for", "with", "at",
-        "by", "from", "is", "are", "be", "this", "that", "it", "as", "me", "my", "we",
-        "you", "your", "help", "please", "can", "could", "would", "should", "do",
-        "does", "how", "what", "why", "want", "need", "make", "get", "new", "use",
-        "about", "into", "let", "lets", "have", "has", "will",
-    }
-    toks, seen_t = [], set()
-    for t in re.findall(r"[A-Za-z0-9_]+", prompt.lower()):
-        if len(t) >= 3 and t not in _STOP and t not in seen_t:
-            seen_t.add(t)
-            toks.append(t)
-    if not toks:
-        return
-    fts = " OR ".join(f'"{t}"' for t in toks[:12])
     try:
         conn = _store.connect(cwd)
-        bm25 = _store.search_bm25(conn, fts, 8)
+        # search_bm25 now keyword-ORs internally (store.fts_or_query), so the
+        # raw prompt is fine here; rrf_fuse keeps the raw prompt for entity boost.
+        bm25 = _store.search_bm25(conn, prompt, 8)
         hits = _store.rrf_fuse(bm25, [], conn=conn, query=prompt)[:6]
         conn.close()
     except Exception:
