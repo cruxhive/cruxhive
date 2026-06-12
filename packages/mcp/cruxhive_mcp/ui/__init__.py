@@ -20,6 +20,25 @@ except ImportError:
 from .. import events as _events
 from .. import store as _store
 
+# Request models MUST live at module scope: with `from __future__ import
+# annotations`, FastAPI resolves body-model hints via the module globals — a
+# model defined inside make_app() is invisible to it and gets mis-bound as a
+# query param (HTTP 422).
+if _FASTAPI_AVAILABLE:
+    class ApproveReq(BaseModel):
+        path: str
+        approver: str
+
+    class RejectReq(BaseModel):
+        path: str
+
+    class RetireReq(BaseModel):
+        path: str
+
+    class UpdateReq(BaseModel):
+        path: str
+        content: str
+
 # Path to bundled docs/guide.html (force-included by hatchling at wheel build).
 # Falls back to repo path when running editable from source.
 _BUNDLED_DOCS = Path(__file__).parent.parent / "static" / "guide.html"
@@ -530,6 +549,93 @@ loadApprovals();
 </html>"""
 
 
+_MANAGE_HTML = """<!doctype html><html><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>CruxHive · Manage</title>
+<style>
+:root{--bg:#0c0a09;--panel:#1c1917;--line:#292524;--fg:#e7e5e4;--dim:#a8a29e;--amber:#f59e0b;--green:#34d399;--red:#f87171}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 'IBM Plex Sans',system-ui,sans-serif}
+a{color:var(--amber);text-decoration:none}
+header{display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:1px solid var(--line)}
+header h1{font-size:16px;margin:0;font-weight:700}header .sp{flex:1}
+.tabs{display:flex;gap:6px;padding:12px 22px 0}
+.tab{padding:8px 16px;border:1px solid var(--line);border-bottom:none;border-radius:8px 8px 0 0;cursor:pointer;color:var(--dim);background:transparent}
+.tab.on{color:var(--fg);background:var(--panel);border-color:var(--line)}
+.wrap{padding:18px 22px;max-width:1000px}
+input,select,textarea{background:var(--panel);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:9px 11px;font:inherit}
+input[type=text]{width:100%}
+.row{display:flex;gap:10px;margin-bottom:14px;align-items:center}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.badge{font-size:11px;padding:2px 8px;border-radius:999px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.b-constraint{background:#3b1414;color:#f87171}.b-decision{background:#1e2d3b;color:#38bdf8}
+.b-fact{background:#1c2b1c;color:#86efac}.b-plan{background:#2d2a14;color:#fcd34d}
+.b-pattern{background:#2a1e34;color:#c4b5fd}.b-outcome,.b-research,.b-note{background:#27241f;color:#a8a29e}
+.meta{color:var(--dim);font-size:12px}.snip{color:var(--dim);margin-top:6px;font-size:13px}
+.btn{background:transparent;border:1px solid var(--line);color:var(--fg);border-radius:7px;padding:5px 11px;cursor:pointer;font:inherit}
+.btn:hover{border-color:var(--amber)}.btn.danger:hover{border-color:var(--red);color:var(--red)}
+.pill{font-size:11px;padding:2px 8px;border-radius:999px}.pill.on{background:#11251c;color:var(--green)}.pill.off{background:#251111;color:var(--red)}
+.g-block{color:var(--green);font-weight:600}.g-warn{color:var(--amber);font-weight:600}
+.acts{display:flex;gap:8px;margin-top:8px}
+.modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;padding:20px}
+.modal.on{display:flex}.modal .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;width:760px;max-width:100%;max-height:86vh;display:flex;flex-direction:column}
+.modal .box header{justify-content:space-between}.modal textarea{flex:1;min-height:360px;margin:14px;font:13px/1.5 'IBM Plex Mono',monospace;resize:vertical}
+.modal .foot{padding:0 14px 14px;display:flex;gap:8px;justify-content:flex-end}
+h3{margin:18px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);padding:10px 16px;border-radius:8px;opacity:0;transition:.2s}
+.toast.on{opacity:1}
+</style></head><body>
+<header><h1>🛡 CruxHive · Manage</h1><span id=proj class=meta></span><span class=sp></span><a href="/">← dashboard</a></header>
+<div class=tabs>
+ <div class=tab data-t=search onclick=tab('search')>Search</div>
+ <div class=tab data-t=guard onclick=tab('guard')>Guardrails</div>
+ <div class=tab data-t=browse onclick=tab('browse')>Browse &amp; manage</div>
+</div>
+<div class=wrap>
+ <div id=search style=display:none>
+   <div class=row><input id=q type=text placeholder="Search the knowledge base…" onkeydown="if(event.key=='Enter')doSearch()"><button class=btn onclick=doSearch()>Search</button></div>
+   <div id=searchres></div>
+ </div>
+ <div id=guard style=display:none></div>
+ <div id=browse style=display:none>
+   <div class=row>
+     <select id=ftype onchange=loadEntries()>
+       <option value="">all types</option><option>constraint</option><option>decision</option>
+       <option>fact</option><option>pattern</option><option>plan</option><option>research</option><option>outcome</option>
+     </select>
+     <input id=fq type=text placeholder="filter by topic / path…" oninput=loadEntries()>
+   </div>
+   <div id=entries></div>
+ </div>
+</div>
+<div class=modal id=modal><div class=box>
+  <header><strong id=mtitle></strong><button class=btn onclick=closeModal()>✕</button></header>
+  <textarea id=mcontent spellcheck=false></textarea>
+  <div class=foot><span id=mpath class=meta style=margin-right:auto></span>
+    <button class=btn onclick=closeModal()>Cancel</button><button class=btn onclick=saveEntry()>Save</button></div>
+</div></div>
+<div class=toast id=toast></div>
+<script>
+const $=s=>document.querySelector(s);let cur='search';
+function tab(t){cur=t;['search','guard','browse'].forEach(x=>{$('#'+x).style.display=x==t?'block':'none';document.querySelector('.tab[data-t='+x+']').classList.toggle('on',x==t)});if(t=='guard')loadGuard();if(t=='browse')loadEntries()}
+function bdg(t){return `<span class="badge b-${t||'note'}">${t||'note'}</span>`}
+function toast(m){const e=$('#toast');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),1800)}
+async function doSearch(){const q=$('#q').value.trim();if(!q)return;const r=await fetch('/api/search?q='+encodeURIComponent(q));const d=await r.json();
+ $('#searchres').innerHTML=d.length?d.map(h=>`<div class=card>${bdg(h.type)} <strong>${h.topic||''}</strong> <span class=meta>${h.scope||''} · ${h.path}</span><div class=snip>${(h.snippet||'').replace(/[<>]/g,'')}</div><div class=acts><button class=btn onclick="view('${h.path}')">view</button></div></div>`).join(''):'<div class=meta>No results.</div>'}
+async function loadGuard(){const d=await (await fetch('/api/guardrails')).json();
+ let h='<h3>Built-in (always on)</h3>'+d.builtin.map(g=>`<div class=card><span class="${g.kind=='block'?'g-block':'g-warn'}">[${g.kind}]</span> <strong>${g.name}</strong><div class=snip>${g.desc}</div></div>`).join('');
+ h+='<h3>Project rules (.llm/guardrails.toml)</h3>'+(d.rules.length?d.rules.map(r=>`<div class=card><span class=g-block>[block]</span> <span class=meta>${r.tool||'Bash'}:</span> <code>${r.pattern}</code><div class=snip>${r.message||''}</div></div>`).join(''):'<div class=meta>None — add [[deny]] entries to .llm/guardrails.toml</div>');
+ h+='<h3>Knowledge constraints</h3>'+(d.constraints.length?d.constraints.map(c=>`<div class=card>${bdg('constraint')} <strong>${c.topic||''}</strong> <span class=meta>${c.scope}</span> <span class="pill ${c.active?'on':'off'}">${c.active?'active':'retired'}</span></div>`).join(''):'<div class=meta>None yet.</div>');
+ $('#guard').innerHTML=h}
+async function loadEntries(){const t=$('#ftype').value,q=$('#fq').value;const d=await (await fetch('/api/entries?type='+t+'&q='+encodeURIComponent(q))).json();
+ $('#entries').innerHTML=d.length?d.map(e=>`<div class=card>${bdg(e.type)} <strong>${e.topic||'(no topic)'}</strong> <span class=meta>${e.scope||''} · ${e.path}</span> <span class="pill ${e.active?'on':'off'}">${e.active?'active':'retired'}</span><div class=acts><button class=btn onclick="view('${e.path}')">view / edit</button>${e.active?`<button class="btn danger" onclick="retire('${e.path}')">retire</button>`:''}</div></div>`).join(''):'<div class=meta>No entries.</div>'}
+async function view(p){const d=await (await fetch('/api/entry?path='+encodeURIComponent(p))).json();$('#mtitle').textContent=p.split('/').pop();$('#mpath').textContent=p;$('#mcontent').value=d.content;$('#mcontent').dataset.path=p;$('#modal').classList.add('on')}
+function closeModal(){$('#modal').classList.remove('on')}
+async function saveEntry(){const p=$('#mcontent').dataset.path;const r=await fetch('/api/update',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p,content:$('#mcontent').value})});if(r.ok){toast('Saved & reindexed');closeModal();if(cur=='browse')loadEntries()}else toast('Save failed')}
+async function retire(p){if(!confirm('Retire this entry? (sets invalid_at; not deleted)'))return;const r=await fetch('/api/retire',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p})});if(r.ok){toast('Retired');loadEntries()}else toast('Retire failed')}
+tab('search');
+</script></body></html>"""
+
+
 def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name-defined]
     if not _FASTAPI_AVAILABLE:
         raise ImportError(
@@ -538,13 +644,6 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
 
     root = project_root or os.getcwd()
     app = FastAPI(title="CruxHive", docs_url=None, redoc_url=None)
-
-    class ApproveReq(BaseModel):
-        path: str
-        approver: str
-
-    class RejectReq(BaseModel):
-        path: str
 
     @app.get("/", response_class=HTMLResponse)
     def index():
@@ -641,6 +740,110 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
         rows = _events.stale_entries(conn, days=days)
         conn.close()
         return rows
+
+    # ── Human gate: see / search / manage ────────────────────────────────
+    @app.get("/manage", response_class=HTMLResponse)
+    def manage_page():
+        return _MANAGE_HTML
+
+    def _safe_entry_path(path: str) -> str:
+        if ".." in path or not path.startswith(".llm/"):
+            raise HTTPException(400, detail="invalid path")
+        fp = os.path.join(root, path)
+        if not os.path.exists(fp):
+            raise HTTPException(404, detail="entry not found")
+        return fp
+
+    @app.get("/api/search")
+    def api_search(q: str, n: int = 25):
+        if not q.strip():
+            return []
+        conn = _store.connect(root)
+        bm25 = _store.search_bm25(conn, q, n)
+        hits = _store.rrf_fuse(bm25, [], conn=conn, query=q)[:n]
+        conn.close()
+        return [{
+            "path": h.get("path"), "topic": h.get("topic"), "type": h.get("type"),
+            "scope": h.get("scope"), "snippet": (h.get("snippet") or "")[:240],
+        } for h in hits]
+
+    @app.get("/api/entries")
+    def api_entries(type: str = "", q: str = ""):
+        conn = _store.connect(root)
+        sql = ("SELECT path, type, topic, scope, confidence, approved_by, "
+               "valid_at, invalid_at FROM entries WHERE 1=1")
+        params: list = []
+        if type:
+            sql += " AND type = ?"
+            params.append(type)
+        sql += " ORDER BY type, topic"
+        rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+        conn.close()
+        if q:
+            ql = q.lower()
+            rows = [r for r in rows
+                    if ql in (r.get("topic") or "").lower()
+                    or ql in (r.get("path") or "").lower()]
+        for r in rows:
+            iv = r.get("invalid_at")
+            r["active"] = iv in (None, "", "~", "null", "none")
+        return rows
+
+    @app.get("/api/entry")
+    def api_entry(path: str):
+        fp = _safe_entry_path(path)
+        with open(fp, encoding="utf-8") as f:
+            return {"path": path, "content": f.read()}
+
+    @app.get("/api/guardrails")
+    def api_guardrails():
+        from ..cli import _BUILTIN_GUARDRAILS
+        builtin = [{"kind": k, "name": n, "desc": d}
+                   for k, n, d in _BUILTIN_GUARDRAILS]
+        rules = []
+        cfgp = os.path.join(root, ".llm", "guardrails.toml")
+        if os.path.exists(cfgp):
+            try:
+                import tomllib
+                with open(cfgp, "rb") as f:
+                    rules = tomllib.load(f).get("deny", [])
+            except Exception:
+                pass
+        conn = _store.connect(root)
+        crows = conn.execute(
+            "SELECT topic, scope, invalid_at FROM entries "
+            "WHERE type='constraint' ORDER BY topic").fetchall()
+        conn.close()
+        constraints = [{
+            "topic": r["topic"], "scope": r["scope"],
+            "active": r["invalid_at"] in (None, "", "~", "null", "none"),
+        } for r in crows]
+        return {"builtin": builtin, "rules": rules, "constraints": constraints}
+
+    @app.post("/api/retire")
+    def api_retire(req: RetireReq):
+        import datetime
+        import re as _re
+        fp = _safe_entry_path(req.path)
+        with open(fp, encoding="utf-8") as f:
+            txt = f.read()
+        today = datetime.date.today().isoformat()
+        if _re.search(r"(?m)^invalid_at:.*$", txt):
+            txt = _re.sub(r"(?m)^invalid_at:.*$", f"invalid_at: {today}", txt, count=1)
+        else:
+            txt = _re.sub(r"^(---\s*\n)", rf"\1invalid_at: {today}\n", txt, count=1)
+        with open(fp, "w", encoding="utf-8") as f:
+            f.write(txt)
+        _store.index(root)
+        return {"ok": True, "invalid_at": today}
+
+    @app.post("/api/update")
+    def api_update(req: UpdateReq):
+        fp = _safe_entry_path(req.path)
+        with open(fp, "w", encoding="utf-8") as f:
+            f.write(req.content)
+        _store.index(root)
+        return {"ok": True}
 
     return app
 
