@@ -188,6 +188,10 @@ def _scan_md_files(root: str) -> list[tuple[Path, str]]:
     result: list[tuple[Path, str]] = []
     base = Path(root) / ".llm"
     for f in _scan_dir(base):
+        # `session-*` files are /extract queue stubs (a pointer to a transcript),
+        # not knowledge — don't index them as entries (they pollute search + counts).
+        if f.name.startswith("session-"):
+            continue
         result.append((f, str(f.relative_to(root))))
     # Also include personal layer — visible from every project
     if PERSONAL_ROOT.exists():
