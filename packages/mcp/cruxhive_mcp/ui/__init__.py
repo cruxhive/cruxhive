@@ -39,6 +39,64 @@ if _FASTAPI_AVAILABLE:
         path: str
         content: str
 
+    class ProposeReq(BaseModel):
+        type: str
+        topic: str
+        scope: str = "project"
+        content: str
+
+    class RuleReq(BaseModel):
+        tool: str = "Bash"
+        pattern: str
+        message: str = ""
+
+
+_VALID_TYPES = {"fact", "decision", "plan", "pattern", "constraint", "research", "outcome"}
+
+
+def _propose_entry(root: str, etype: str, topic: str, scope: str, content: str):
+    """Create a knowledge entry from the UI (mirrors cruxhive-propose).
+
+    Returns (relative_path, approved: bool). Raises ValueError on bad input.
+    """
+    import datetime
+    from pathlib import Path
+    from .. import store as _store
+    from .. import workspace as _ws
+
+    etype = (etype or "").strip()
+    topic = (topic or "").strip()
+    content = (content or "").strip()
+    if etype not in _VALID_TYPES:
+        raise ValueError(f"Invalid type '{etype}'. Use: {', '.join(sorted(_VALID_TYPES))}")
+    if not topic or not content:
+        raise ValueError("topic and content are required")
+
+    date = datetime.date.today().isoformat()
+    slug = topic.lower().replace(" ", "-").replace("/", "-")[:40]
+    pending = Path(root) / ".llm" / "pending"
+    pending.mkdir(parents=True, exist_ok=True)
+    fpath = pending / f"{etype}_{slug}.md"
+    i = 1
+    while fpath.exists():
+        fpath = pending / f"{etype}_{slug}_{i}.md"
+        i += 1
+
+    solo_enabled, solo_approver = _ws.is_solo()
+    source_val = "human" if solo_enabled else "ai-proposed"
+    approved_by = solo_approver if solo_enabled else "~"
+    fpath.write_text(
+        f"---\ntype: {etype}\nscope: {scope or 'project'}\ntopic: {topic}\n"
+        f"valid_at: {date}\ninvalid_at: ~\nconfidence: medium\n"
+        f"source: {source_val}\napproved_by: {approved_by}\n---\n\n{content}\n",
+        encoding="utf-8",
+    )
+    try:
+        _store.index(root)
+    except Exception:
+        pass
+    return str(fpath.relative_to(root)), bool(solo_enabled)
+
 # Path to bundled docs/guide.html (force-included by hatchling at wheel build).
 # Falls back to repo path when running editable from source.
 _BUNDLED_DOCS = Path(__file__).parent.parent / "static" / "guide.html"
@@ -596,7 +654,7 @@ h3{margin:18px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.05e
 <div class=wrap>
  <div id=search style=display:none>
    <div class=row><input id=q type=text placeholder="Search the knowledge base…" onkeydown="if(event.key=='Enter')doSearch()"><button class=btn onclick=doSearch()>Search</button></div>
-   <div id=searchres></div>
+   <div id=searchres><div class=meta>Type a query and hit Enter.</div></div>
  </div>
  <div id=guard style=display:none></div>
  <div id=browse style=display:none>
@@ -606,35 +664,70 @@ h3{margin:18px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.05e
        <option>fact</option><option>pattern</option><option>plan</option><option>research</option><option>outcome</option>
      </select>
      <input id=fq type=text placeholder="filter by topic / path…" oninput=loadEntries()>
+     <input id=approver type=text placeholder="approver" value=me style=max-width:120px>
+     <button class=btn onclick="newEntry()">+ New entry</button>
    </div>
    <div id=entries></div>
  </div>
 </div>
 <div class=modal id=modal><div class=box>
-  <header><strong id=mtitle></strong><button class=btn onclick=closeModal()>✕</button></header>
+  <header><strong id=mtitle></strong><button class=btn onclick="cls('modal')">✕</button></header>
   <textarea id=mcontent spellcheck=false></textarea>
   <div class=foot><span id=mpath class=meta style=margin-right:auto></span>
-    <button class=btn onclick=closeModal()>Cancel</button><button class=btn onclick=saveEntry()>Save</button></div>
+    <button class=btn onclick="cls('modal')">Cancel</button><button class=btn onclick=saveEntry()>Save</button></div>
+</div></div>
+<div class=modal id=emodal><div class=box>
+  <header><strong>New entry</strong><button class=btn onclick="cls('emodal')">✕</button></header>
+  <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
+    <div class=row style=margin:0>
+      <select id=etype><option>constraint</option><option>decision</option><option>fact</option><option>pattern</option><option>plan</option><option>research</option><option>outcome</option></select>
+      <select id=escope><option>project</option><option>org</option><option>personal</option></select>
+    </div>
+    <input id=etopic type=text placeholder="topic (1-3 words, e.g. deploy-safety)">
+    <textarea id=econtent placeholder="The rule/fact. End with **Why:** the rationale." style="min-height:200px;margin:0;font:13px/1.5 'IBM Plex Mono',monospace"></textarea>
+  </div>
+  <div class=foot><button class=btn onclick="cls('emodal')">Cancel</button><button class=btn onclick=submitEntry()>Create</button></div>
+</div></div>
+<div class=modal id=rmodal><div class=box>
+  <header><strong>New deny rule</strong><button class=btn onclick="cls('rmodal')">✕</button></header>
+  <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
+    <select id=rtool><option value=Bash>Bash — match the shell command</option><option value=path>path — match the Edit/Write file path</option></select>
+    <input id=rpattern type=text placeholder="regex, e.g. rm -rf / or config/prod\\.ya?ml$">
+    <input id=rmessage type=text placeholder="message shown when blocked">
+  </div>
+  <div class=foot><button class=btn onclick="cls('rmodal')">Cancel</button><button class=btn onclick=submitRule()>Add rule</button></div>
 </div></div>
 <div class=toast id=toast></div>
 <script>
 const $=s=>document.querySelector(s);let cur='search';
+function openM(id){$('#'+id).classList.add('on')}function cls(id){$('#'+id).classList.remove('on')}
 function tab(t){cur=t;['search','guard','browse'].forEach(x=>{$('#'+x).style.display=x==t?'block':'none';document.querySelector('.tab[data-t='+x+']').classList.toggle('on',x==t)});if(t=='guard')loadGuard();if(t=='browse')loadEntries()}
 function bdg(t){return `<span class="badge b-${t||'note'}">${t||'note'}</span>`}
-function toast(m){const e=$('#toast');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),1800)}
-async function doSearch(){const q=$('#q').value.trim();if(!q)return;const r=await fetch('/api/search?q='+encodeURIComponent(q));const d=await r.json();
- $('#searchres').innerHTML=d.length?d.map(h=>`<div class=card>${bdg(h.type)} <strong>${h.topic||''}</strong> <span class=meta>${h.scope||''} · ${h.path}</span><div class=snip>${(h.snippet||'').replace(/[<>]/g,'')}</div><div class=acts><button class=btn onclick="view('${h.path}')">view</button></div></div>`).join(''):'<div class=meta>No results.</div>'}
+function esc(s){return (s||'').replace(/[<>]/g,'')}
+function toast(m){const e=$('#toast');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),2000)}
+function reloadCur(){if(cur=='guard')loadGuard();else if(cur=='browse')loadEntries()}
+async function doSearch(){const q=$('#q').value.trim();if(!q)return;const d=await (await fetch('/api/search?q='+encodeURIComponent(q))).json();
+ $('#searchres').innerHTML=d.length?d.map(h=>`<div class=card>${bdg(h.type)} <strong>${esc(h.topic)}</strong> <span class=meta>${esc(h.scope)} · ${h.path}</span><div class=snip>${esc(h.snippet)}</div><div class=acts><button class=btn onclick="view('${h.path}')">view / edit</button></div></div>`).join(''):'<div class=meta>No results.</div>'}
 async function loadGuard(){const d=await (await fetch('/api/guardrails')).json();
- let h='<h3>Built-in (always on)</h3>'+d.builtin.map(g=>`<div class=card><span class="${g.kind=='block'?'g-block':'g-warn'}">[${g.kind}]</span> <strong>${g.name}</strong><div class=snip>${g.desc}</div></div>`).join('');
- h+='<h3>Project rules (.llm/guardrails.toml)</h3>'+(d.rules.length?d.rules.map(r=>`<div class=card><span class=g-block>[block]</span> <span class=meta>${r.tool||'Bash'}:</span> <code>${r.pattern}</code><div class=snip>${r.message||''}</div></div>`).join(''):'<div class=meta>None — add [[deny]] entries to .llm/guardrails.toml</div>');
- h+='<h3>Knowledge constraints</h3>'+(d.constraints.length?d.constraints.map(c=>`<div class=card>${bdg('constraint')} <strong>${c.topic||''}</strong> <span class=meta>${c.scope}</span> <span class="pill ${c.active?'on':'off'}">${c.active?'active':'retired'}</span></div>`).join(''):'<div class=meta>None yet.</div>');
+ let h='<div class=row style="justify-content:flex-end"><button class=btn onclick="newEntry(\\'constraint\\')">+ Add constraint</button><button class=btn onclick="openM(\\'rmodal\\')">+ Add deny rule</button></div>';
+ h+='<h3>Built-in (always on)</h3>'+d.builtin.map(g=>`<div class=card><span class="${g.kind=='block'?'g-block':'g-warn'}">[${g.kind}]</span> <strong>${g.name}</strong><div class=snip>${g.desc}</div></div>`).join('');
+ h+='<h3>Project rules (.llm/guardrails.toml)</h3>'+(d.rules.length?d.rules.map(r=>`<div class=card><span class=g-block>[block]</span> <span class=meta>${r.tool||'Bash'}:</span> <code>${esc(r.pattern)}</code><div class=snip>${esc(r.message)}</div></div>`).join(''):'<div class=meta>None — click “+ Add deny rule”.</div>');
+ h+='<h3>Knowledge constraints</h3>'+(d.constraints.length?d.constraints.map(c=>`<div class=card>${bdg('constraint')} <strong>${esc(c.topic)}</strong> <span class=meta>${c.scope}</span> <span class="pill ${c.active?'on':'off'}">${c.active?'active':'retired'}</span>${c.active?`<div class=acts><button class="btn danger" onclick="retire('.llm/pending/constraint_${c.topic}.md')">retire</button></div>`:''}</div>`).join(''):'<div class=meta>None — click “+ Add constraint”.</div>');
  $('#guard').innerHTML=h}
-async function loadEntries(){const t=$('#ftype').value,q=$('#fq').value;const d=await (await fetch('/api/entries?type='+t+'&q='+encodeURIComponent(q))).json();
- $('#entries').innerHTML=d.length?d.map(e=>`<div class=card>${bdg(e.type)} <strong>${e.topic||'(no topic)'}</strong> <span class=meta>${e.scope||''} · ${e.path}</span> <span class="pill ${e.active?'on':'off'}">${e.active?'active':'retired'}</span><div class=acts><button class=btn onclick="view('${e.path}')">view / edit</button>${e.active?`<button class="btn danger" onclick="retire('${e.path}')">retire</button>`:''}</div></div>`).join(''):'<div class=meta>No entries.</div>'}
-async function view(p){const d=await (await fetch('/api/entry?path='+encodeURIComponent(p))).json();$('#mtitle').textContent=p.split('/').pop();$('#mpath').textContent=p;$('#mcontent').value=d.content;$('#mcontent').dataset.path=p;$('#modal').classList.add('on')}
-function closeModal(){$('#modal').classList.remove('on')}
-async function saveEntry(){const p=$('#mcontent').dataset.path;const r=await fetch('/api/update',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p,content:$('#mcontent').value})});if(r.ok){toast('Saved & reindexed');closeModal();if(cur=='browse')loadEntries()}else toast('Save failed')}
-async function retire(p){if(!confirm('Retire this entry? (sets invalid_at; not deleted)'))return;const r=await fetch('/api/retire',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p})});if(r.ok){toast('Retired');loadEntries()}else toast('Retire failed')}
+async function loadEntries(){const t=$('#ftype').value,q=$('#fq').value;
+ const [pend,ent]=await Promise.all([fetch('/api/pending').then(r=>r.json()).catch(()=>[]),fetch('/api/entries?type='+t+'&q='+encodeURIComponent(q)).then(r=>r.json())]);
+ let h='';
+ if(pend.length){h+='<h3>Pending review ('+pend.length+')</h3>'+pend.map(p=>`<div class=card>${bdg(p.type)} <strong>${esc(p.topic)}</strong> <span class=meta>${p.path}</span>${(p.conflicts&&p.conflicts.length)?` <span class="pill off">⚠ ${p.conflicts.length} conflict</span>`:''}<div class=acts><button class=btn onclick="view('${p.path}')">view</button><button class=btn onclick="approve('${p.path}')">approve</button><button class="btn danger" onclick="rejectP('${p.path}')">reject</button></div></div>`).join('')}
+ h+='<h3>Knowledge entries</h3>'+(ent.length?ent.map(e=>`<div class=card>${bdg(e.type)} <strong>${esc(e.topic)||'(no topic)'}</strong> <span class=meta>${e.scope||''} · ${e.path}</span> <span class="pill ${e.active?'on':'off'}">${e.active?'active':'retired'}</span><div class=acts><button class=btn onclick="view('${e.path}')">view / edit</button>${e.active?`<button class="btn danger" onclick="retire('${e.path}')">retire</button>`:''}</div></div>`).join(''):'<div class=meta>No entries.</div>');
+ $('#entries').innerHTML=h}
+async function view(p){const d=await (await fetch('/api/entry?path='+encodeURIComponent(p))).json();$('#mtitle').textContent=p.split('/').pop();$('#mpath').textContent=p;$('#mcontent').value=d.content;$('#mcontent').dataset.path=p;openM('modal')}
+async function saveEntry(){const p=$('#mcontent').dataset.path;const r=await fetch('/api/update',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p,content:$('#mcontent').value})});if(r.ok){toast('Saved & reindexed');cls('modal');reloadCur()}else{const e=await r.json().catch(()=>({}));toast('Save failed: '+(e.detail||r.status))}}
+async function retire(p){if(!confirm('Retire this entry? (sets invalid_at; file kept)'))return;const r=await fetch('/api/retire',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p})});if(r.ok){toast('Retired');reloadCur()}else toast('Retire failed')}
+async function approve(p){const r=await fetch('/api/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p,approver:$('#approver').value||'me'})});if(r.ok){toast('Approved');loadEntries()}else toast('Approve failed')}
+async function rejectP(p){if(!confirm('Reject and delete this pending proposal?'))return;const r=await fetch('/api/reject',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p})});if(r.ok){toast('Rejected');loadEntries()}else toast('Reject failed')}
+function newEntry(preset){if(preset)$('#etype').value=preset;openM('emodal')}
+async function submitEntry(){const b={type:$('#etype').value,topic:$('#etopic').value,scope:$('#escope').value,content:$('#econtent').value};const r=await fetch('/api/propose',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)});if(r.ok){const d=await r.json();toast(d.approved?'Created & approved':'Proposed for review');cls('emodal');$('#etopic').value='';$('#econtent').value='';reloadCur()}else{const e=await r.json().catch(()=>({}));toast('Failed: '+(e.detail||r.status))}}
+async function submitRule(){const b={tool:$('#rtool').value,pattern:$('#rpattern').value,message:$('#rmessage').value};const r=await fetch('/api/guardrail-rule',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)});if(r.ok){toast('Rule added');cls('rmodal');$('#rpattern').value='';$('#rmessage').value='';loadGuard()}else{const e=await r.json().catch(()=>({}));toast('Failed: '+(e.detail||r.status))}}
 tab('search');
 </script></body></html>"""
 
@@ -860,10 +953,42 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
 
     @app.post("/api/update")
     def api_update(req: UpdateReq):
+        from .. import frontmatter as _fm
+        meta, _body = _fm.parse(req.content)
+        if not meta.get("type"):
+            raise HTTPException(400, detail="Front-matter must include a 'type:' field.")
         fp = _safe_entry_path(req.path)
         with open(fp, "w", encoding="utf-8") as f:
             f.write(req.content)
         _store.index(root)
+        return {"ok": True}
+
+    @app.post("/api/propose")
+    def api_propose(req: ProposeReq):
+        try:
+            rel, approved = _propose_entry(
+                root, req.type, req.topic, req.scope, req.content)
+        except ValueError as e:
+            raise HTTPException(400, detail=str(e))
+        return {"ok": True, "path": rel, "approved": approved}
+
+    @app.post("/api/guardrail-rule")
+    def api_guardrail_rule(req: RuleReq):
+        if not req.pattern.strip():
+            raise HTTPException(400, detail="pattern is required")
+        try:
+            import re as _re
+            _re.compile(req.pattern)
+        except Exception as e:
+            raise HTTPException(400, detail=f"invalid regex: {e}")
+        tool = "path" if req.tool == "path" else "Bash"
+        pat = req.pattern.replace("\\", "\\\\").replace('"', '\\"')
+        msg = (req.message or "").replace("\\", "\\\\").replace('"', '\\"')
+        cfgp = os.path.join(root, ".llm", "guardrails.toml")
+        os.makedirs(os.path.dirname(cfgp), exist_ok=True)
+        with open(cfgp, "a", encoding="utf-8") as f:
+            f.write(f'\n[[deny]]\ntool = "{tool}"\npattern = "{pat}"\n'
+                    f'message = "{msg}"\n')
         return {"ok": True}
 
     return app
