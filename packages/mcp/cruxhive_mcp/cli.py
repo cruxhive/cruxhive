@@ -1115,18 +1115,89 @@ def inject() -> None:
     print("\n".join(lines))
 
 
-def guardrails() -> None:
-    """cruxhive-guardrails: PreToolUse hook — deterministic guardrail enforcement.
+_BUILTIN_GUARDRAILS = [
+    ("block", "secrets-hygiene", "git add/commit of .env / keys / credentials"),
+    ("block", "no-force-push-main", "git push --force to main/master"),
+    ("block", "migration-immutable", "edits to */migrations|alembic/versions/*.py"),
+    ("warn", "deploy-safety", "deploy_prod.sh (production) — confirm staging first"),
+]
 
-    Reads the Claude Code PreToolUse payload on stdin and BLOCKS (exit 2, reason
-    on stderr) actions that violate high-stakes guardrails: committing secrets,
-    force-pushing protected branches, editing merged migrations. Soft actions
-    (prod deploy) pass with a warning. Any unexpected error -> allow (fail open):
-    a guardrail bug must never brick the workflow.
+
+def _guardrails_list() -> None:
+    """Render every active guardrail for the current project (cruxhive-guardrails --list)."""
+    G, Y, D, R, B = "\033[32m", "\033[33m", "\033[2m", "\033[0m", "\033[1m"
+    cwd = os.getcwd()
+    print(f"\n{B}CruxHive guardrails{R} — {os.path.basename(cwd.rstrip('/')) or cwd}\n")
+
+    print(f"{B}Built-in{R} {D}(always on){R}")
+    for kind, name, desc in _BUILTIN_GUARDRAILS:
+        tag = f"{G}[block]{R}" if kind == "block" else f"{Y}[warn] {R}"
+        print(f"  {tag} {name:<20} {D}{desc}{R}")
+
+    print(f"\n{B}Project rules{R} {D}(.llm/guardrails.toml){R}")
+    rules = []
+    cfg = os.path.join(cwd, ".llm", "guardrails.toml")
+    if os.path.exists(cfg):
+        try:
+            import tomllib
+            with open(cfg, "rb") as f:
+                rules = tomllib.load(f).get("deny", [])
+        except Exception:
+            pass
+    if rules:
+        for d in rules:
+            msg = (d.get("message", "") or "")[:55]
+            print(f"  {G}[block]{R} {D}{d.get('tool', 'Bash')}:{R} {d.get('pattern')}  {D}— {msg}{R}")
+    else:
+        print(f"  {D}none — add [[deny]] entries to .llm/guardrails.toml{R}")
+
+    print(f"\n{B}Knowledge constraints{R} {D}(surfaced to the agent){R}")
+    rows = []
+    try:
+        from . import store as _store
+        conn = _store.connect(cwd)
+        rows = conn.execute(
+            "SELECT topic, scope, invalid_at FROM entries "
+            "WHERE type='constraint' ORDER BY topic"
+        ).fetchall()
+        conn.close()
+    except Exception:
+        pass
+    if rows:
+        for r in rows:
+            inv = r["invalid_at"]
+            active = inv in (None, "", "~", "null", "none")
+            state = f"{G}active{R}" if active else f"{D}retired ({inv}){R}"
+            print(f"  [constraint] {r['topic'] or '(no topic)':<22} {D}{r['scope']}{R}  {state}")
+    else:
+        print(f"  {D}none — add via: cruxhive-propose constraint <topic>{R}")
+
+    print(f"\n{B}Manage{R}")
+    print(f"  {D}add deny rule  →{R} edit .llm/guardrails.toml")
+    print(f"  {D}add constraint →{R} cruxhive-propose constraint <topic>")
+    print(f"  {D}retire         →{R} set invalid_at in the entry / remove the toml rule")
+    print()
+
+
+def guardrails() -> None:
+    """cruxhive-guardrails: guardrail enforcement + inspection.
+
+    No args (PreToolUse hook): reads the Claude Code payload on stdin and BLOCKS
+    (exit 2, reason on stderr) actions that violate high-stakes guardrails —
+    committing secrets, force-pushing protected branches, editing merged
+    migrations. Soft actions (prod deploy) pass with a warning. Any unexpected
+    error -> allow (fail open): a guardrail bug must never brick the workflow.
+
+    `--list` / `-l`: print all active guardrails for the current project
+    (built-in rules + .llm/guardrails.toml + knowledge constraints).
 
     Projects extend the default set via .llm/guardrails.toml — [[deny]] entries
     with tool = "Bash" | "path", pattern = "<regex>", message = "...".
     """
+    if any(a in ("--list", "-l") for a in sys.argv[1:]):
+        _guardrails_list()
+        return
+
     import json
     import re as _re
 
