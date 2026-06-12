@@ -1115,6 +1115,107 @@ def inject() -> None:
     print("\n".join(lines))
 
 
+def guardrails() -> None:
+    """cruxhive-guardrails: PreToolUse hook — deterministic guardrail enforcement.
+
+    Reads the Claude Code PreToolUse payload on stdin and BLOCKS (exit 2, reason
+    on stderr) actions that violate high-stakes guardrails: committing secrets,
+    force-pushing protected branches, editing merged migrations. Soft actions
+    (prod deploy) pass with a warning. Any unexpected error -> allow (fail open):
+    a guardrail bug must never brick the workflow.
+
+    Projects extend the default set via .llm/guardrails.toml — [[deny]] entries
+    with tool = "Bash" | "path", pattern = "<regex>", message = "...".
+    """
+    import json
+    import re as _re
+
+    bash_deny = [
+        ("secrets-hygiene",
+         _re.compile(r"\bgit\s+(add|commit)\b", _re.I),
+         _re.compile(r"\.env(\.|\b)|id_rsa|\.pem\b|\.key\b|credentials|\.npmrc|"
+                     r"\.pypirc|secrets?\.(ya?ml|json|toml)", _re.I),
+         "Guardrail [secrets-hygiene]: refusing to git add/commit a secret file "
+         "(.env / key / credentials). Keep secrets out of the repo; add to .gitignore."),
+        ("no-force-push-main",
+         _re.compile(r"\bgit\s+push\b.*(--force\b|-f\b)", _re.I),
+         _re.compile(r"\b(main|master)\b", _re.I),
+         "Guardrail [no-force-push-main]: force-push to main/master is blocked. "
+         "Rewrite history on a feature branch."),
+    ]
+    path_deny = [
+        ("migration-immutable",
+         _re.compile(r"(migrations|alembic)/versions/.+\.py$", _re.I),
+         "Guardrail [migration-immutable]: merged migration files are immutable. "
+         "Add a new revision (expand-contract) instead of editing in place."),
+    ]
+    bash_warn = [
+        (_re.compile(r"deploy_prod\.sh", _re.I),
+         "Guardrail [deploy-safety]: targets PRODUCTION directly — confirm it was "
+         "tested on staging first."),
+    ]
+
+    block_msg = None
+    try:
+        payload = json.load(sys.stdin)
+        tool = payload.get("tool_name") or ""
+        ti = payload.get("tool_input") or {}
+        cwd = payload.get("cwd") or os.getcwd()
+
+        extra_bash: list = []
+        extra_path: list = []
+        cfg = os.path.join(cwd, ".llm", "guardrails.toml")
+        if os.path.exists(cfg):
+            try:
+                import tomllib
+                with open(cfg, "rb") as f:
+                    data = tomllib.load(f)
+                for d in data.get("deny", []):
+                    rx = _re.compile(d["pattern"], _re.I)
+                    msg = d.get("message",
+                                f"Guardrail: blocked by .llm/guardrails.toml ({d.get('pattern')})")
+                    if d.get("tool") == "path":
+                        extra_path.append((rx, msg))
+                    else:
+                        extra_bash.append((_re.compile(r".*"), rx, msg))
+            except Exception:
+                pass
+
+        if tool == "Bash":
+            cmd = ti.get("command") or ""
+            for _l, trig, targ, msg in bash_deny:
+                if trig.search(cmd) and targ.search(cmd):
+                    block_msg = msg
+                    break
+            if block_msg is None:
+                for trig, targ, msg in extra_bash:
+                    if trig.search(cmd) and targ.search(cmd):
+                        block_msg = msg
+                        break
+            if block_msg is None:
+                for rx, msg in bash_warn:
+                    if rx.search(cmd):
+                        sys.stderr.write(msg + "\n")  # visible, non-blocking
+                        break
+        elif tool in ("Edit", "Write", "NotebookEdit"):
+            fp = ti.get("file_path") or ti.get("notebook_path") or ""
+            for _l, rx, msg in path_deny:
+                if rx.search(fp):
+                    block_msg = msg
+                    break
+            if block_msg is None:
+                for rx, msg in extra_path:
+                    if rx.search(fp):
+                        block_msg = msg
+                        break
+    except Exception:
+        block_msg = None  # fail open
+
+    if block_msg:
+        sys.stderr.write(block_msg + "\n")
+        sys.exit(2)
+
+
 def reject() -> None:
     """cruxhive-reject: reject a pending entry. Args: <path>"""
     args = sys.argv[1:]

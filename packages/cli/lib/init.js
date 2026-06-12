@@ -507,10 +507,50 @@ function wireClaudeUserPromptSubmit(cwd) {
   ok(".claude/settings.json UserPromptSubmit hook added (auto-retrieve)");
 }
 
+// Hard guardrail enforcement: deny dangerous tool calls (secrets, force-push,
+// merged-migration edits) deterministically — fails open on any error.
+const CLAUDE_GUARDRAIL_HOOK = {
+  type: "command",
+  command: "cruxhive-guardrails",
+  timeout: 5,
+};
+
+function wireClaudeGuardrails(cwd) {
+  const settingsPath = join(cwd, ".claude", "settings.json");
+  let cfg = {};
+  if (existsSync(settingsPath)) {
+    try {
+      cfg = JSON.parse(readFileSync(settingsPath, "utf8"));
+    } catch {
+      warn(".claude/settings.json malformed — skipping PreToolUse guardrail hook");
+      return;
+    }
+  }
+  cfg.hooks = cfg.hooks || {};
+  cfg.hooks.PreToolUse = cfg.hooks.PreToolUse || [];
+
+  const matcher = "Bash|Edit|Write|NotebookEdit";
+  let bucket = cfg.hooks.PreToolUse.find((h) => h.matcher === matcher);
+  if (!bucket) {
+    bucket = { matcher, hooks: [] };
+    cfg.hooks.PreToolUse.push(bucket);
+  }
+  bucket.hooks = bucket.hooks || [];
+  if (bucket.hooks.some((h) => typeof h.command === "string" && h.command.includes("cruxhive-guardrails"))) {
+    info(".claude/settings.json already invokes cruxhive-guardrails");
+    return;
+  }
+  bucket.hooks.push(CLAUDE_GUARDRAIL_HOOK);
+  mkdirSync(dirname(settingsPath), { recursive: true });
+  writeFileSync(settingsPath, JSON.stringify(cfg, null, 2) + "\n");
+  ok(".claude/settings.json PreToolUse hook added (guardrail enforcement)");
+}
+
 function wireAutomationHooks(cwd) {
   wirePostCommit(cwd);
   wireClaudeSessionStart(cwd);
   wireClaudeUserPromptSubmit(cwd);
+  wireClaudeGuardrails(cwd);
   wireOpenCodePlugin(cwd);
 }
 
