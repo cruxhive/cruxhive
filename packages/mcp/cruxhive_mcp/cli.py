@@ -43,11 +43,11 @@ def ui() -> None:
             print(ui.__doc__)
             return
 
-    from .ui import make_app, make_workspace_app  # type: ignore[attr-defined]
+    from .ui import make_app, make_unified_app  # type: ignore[attr-defined]
 
-    app = make_workspace_app() if workspace else make_app()
+    app = make_unified_app() if workspace else make_app()
     print(f"  \033[32m✓\033[0m  CruxHive UI → http://{host}:{port}"
-          f"{'  (workspace mode)' if workspace else ''}")
+          f"{'  (workspace + per-project drill-in)' if workspace else ''}")
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 

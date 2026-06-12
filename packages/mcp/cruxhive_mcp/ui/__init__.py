@@ -262,10 +262,10 @@ _HTML = """<!doctype html>
     <h1>crux<span>hive</span></h1>
   </a>
   <div class="stats" id="stats"></div>
-  <a href="/manage" title="Search, browse & manage knowledge + guardrails"
+  <a href="manage" title="Search, browse & manage knowledge + guardrails"
      style="color:#f5a524;font-size:.78rem;text-decoration:none;
             padding:.35rem .7rem;border:1px solid #3a2f14;border-radius:.3rem;margin-right:.4rem">🛡 Manage</a>
-  <a href="/docs" target="_blank" rel="noopener" title="Open the CruxHive guide in a new tab"
+  <a href="docs" target="_blank" rel="noopener" title="Open the CruxHive guide in a new tab"
      style="color:#94a3b8;font-size:.78rem;text-decoration:none;
             padding:.35rem .7rem;border:1px solid #2a2a2a;border-radius:.3rem">Docs ↗</a>
 </header>
@@ -409,7 +409,7 @@ function kpiClass(value, thresholds, lowerIsBetter=false) {
 }
 
 async function loadKpiStrip() {
-  const r = await fetch('/api/kpis');
+  const r = await fetch('api/kpis');
   if (!r.ok) return;
   const k = await r.json();
   const hitRate = k.searches ? Math.round((k.hits / k.searches) * 100) : null;
@@ -451,8 +451,8 @@ async function loadKpiStrip() {
 
 async function loadApprovals() {
   const [pRes, sRes] = await Promise.all([
-    fetch('/api/pending'),
-    fetch('/api/stats'),
+    fetch('api/pending'),
+    fetch('api/stats'),
   ]);
   const pending = await pRes.json();
   renderHeader(await sRes.json());
@@ -491,7 +491,7 @@ async function loadApprovals() {
 
 async function loadUsage() {
   const d = document.getElementById('usage-days').value;
-  const data = await (await fetch(`/api/usage?days=${d}`)).json();
+  const data = await (await fetch(`api/usage?days=${d}`)).json();
   const s = data.summary, p = data.pending;
   const hitPct = s.searches ? (s.hit_rate * 100).toFixed(0) + '%' : '—';
   document.getElementById('usage-kpis').innerHTML = `
@@ -527,7 +527,7 @@ async function loadUsage() {
 
 async function loadModels() {
   const d = document.getElementById('models-days').value;
-  const rows = await (await fetch(`/api/by-tool?days=${d}`)).json();
+  const rows = await (await fetch(`api/by-tool?days=${d}`)).json();
   const tb = document.getElementById('models-tbody');
   if (!rows.length) {
     tb.innerHTML = '<tr><td colspan="7" class="empty">No tool calls logged yet.</td></tr>';
@@ -549,8 +549,8 @@ async function loadModels() {
 
 async function loadGaps() {
   const [g, s] = await Promise.all([
-    fetch('/api/gaps').then(r => r.json()),
-    fetch('/api/stale').then(r => r.json()),
+    fetch('api/gaps').then(r => r.json()),
+    fetch('api/stale').then(r => r.json()),
   ]);
   const gl = document.getElementById('gaps-list');
   gl.innerHTML = g.length
@@ -559,7 +559,7 @@ async function loadGaps() {
           <span class="gap-q">${x.query}</span>
           <span class="pill">${x.times}×</span>
           <span class="pill">${x.clients || '?'}</span>
-          <a href="/manage?new=${encodeURIComponent(x.query)}"
+          <a href="manage?new=${encodeURIComponent(x.query)}"
              style="color:#f5a524;font-size:.72rem;margin-left:auto;text-decoration:none">document →</a>
         </div>`).join('')
     : '<div class="empty">No zero-result queries — AI is finding what it needs ✓</div>';
@@ -581,7 +581,7 @@ async function loadGaps() {
 
 async function retireStale(p) {
   if (!confirm('Retire ' + p + '?\\n(sets invalid_at; file kept, not deleted)')) return;
-  const r = await fetch('/api/retire', {
+  const r = await fetch('api/retire', {
     method: 'POST', headers: {'content-type': 'application/json'},
     body: JSON.stringify({path: p})
   });
@@ -591,21 +591,21 @@ async function retireStale(p) {
 
 async function approve(path) {
   if (!approver) { toast('Enter your name first', false); return; }
-  const res = await fetch('/api/approve', {
+  const res = await fetch('api/approve', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({path, approver}),
   });
   if (res.ok) {
     toast(`Approved: ${path.split('/').pop()}`);
     document.getElementById('card-' + btoa(path))?.remove();
-    renderHeader(await (await fetch('/api/stats')).json());
+    renderHeader(await (await fetch('api/stats')).json());
   } else {
     toast('Approve failed', false);
   }
 }
 
 async function reject(path) {
-  const res = await fetch('/api/reject', {
+  const res = await fetch('api/reject', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({path}),
   });
@@ -659,7 +659,7 @@ h3{margin:18px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.05e
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);padding:10px 16px;border-radius:8px;opacity:0;transition:.2s}
 .toast.on{opacity:1}
 </style></head><body>
-<header><h1>🛡 CruxHive · Manage</h1><span id=proj class=meta></span><span class=sp></span><a href="/">← dashboard</a></header>
+<header><h1>🛡 CruxHive · Manage</h1><span id=proj class=meta></span><span class=sp></span><a href="./">← dashboard</a></header>
 <div class=tabs>
  <div class=tab data-t=search onclick=tab('search')>Search</div>
  <div class=tab data-t=guard onclick=tab('guard')>Guardrails</div>
@@ -722,30 +722,30 @@ function bdg(t){return `<span class="badge b-${t||'note'}">${t||'note'}</span>`}
 function esc(s){return (s||'').replace(/[<>]/g,'')}
 function toast(m){const e=$('#toast');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),2000)}
 function reloadCur(){if(cur=='guard')loadGuard();else if(cur=='browse')loadEntries()}
-async function doSearch(){const q=$('#q').value.trim();if(!q)return;const d=await (await fetch('/api/search?q='+encodeURIComponent(q))).json();
+async function doSearch(){const q=$('#q').value.trim();if(!q)return;const d=await (await fetch('api/search?q='+encodeURIComponent(q))).json();
  $('#searchres').innerHTML=d.length?d.map(h=>`<div class=card>${bdg(h.type)} <strong>${esc(h.topic)}</strong> <span class=meta>${esc(h.scope)} · ${h.path}</span><div class=snip>${esc(h.snippet)}</div><div class=acts><button class=btn onclick="view('${h.path}')">view / edit</button></div></div>`).join(''):'<div class=meta>No results.</div>'}
-async function loadGuard(){const d=await (await fetch('/api/guardrails')).json();
+async function loadGuard(){const d=await (await fetch('api/guardrails')).json();
  let h='<div class=row style="justify-content:flex-end"><button class=btn onclick="newEntry(\\'constraint\\')">+ Add constraint</button><button class=btn onclick="openM(\\'rmodal\\')">+ Add deny rule</button></div>';
  h+='<h3>Built-in (always on)</h3>'+d.builtin.map(g=>`<div class=card><span class="${g.kind=='block'?'g-block':'g-warn'}">[${g.kind}]</span> <strong>${g.name}</strong><div class=snip>${g.desc}</div></div>`).join('');
  h+='<h3>Project rules (.llm/guardrails.toml)</h3>'+(d.rules.length?d.rules.map(r=>`<div class=card><span class=g-block>[block]</span> <span class=meta>${r.tool||'Bash'}:</span> <code>${esc(r.pattern)}</code><div class=snip>${esc(r.message)}</div></div>`).join(''):'<div class=meta>None — click “+ Add deny rule”.</div>');
  h+='<h3>Knowledge constraints</h3>'+(d.constraints.length?d.constraints.map(c=>`<div class=card>${bdg('constraint')} <strong>${esc(c.topic)}</strong> <span class=meta>${c.scope}</span> <span class="pill ${c.active?'on':'off'}">${c.active?'active':'retired'}</span>${c.active?`<div class=acts><button class="btn danger" onclick="retire('.llm/pending/constraint_${c.topic}.md')">retire</button></div>`:''}</div>`).join(''):'<div class=meta>None — click “+ Add constraint”.</div>');
  $('#guard').innerHTML=h}
 async function loadEntries(){const t=$('#ftype').value,q=$('#fq').value;
- const [pend,ent]=await Promise.all([fetch('/api/pending').then(r=>r.json()).catch(()=>[]),fetch('/api/entries?type='+t+'&q='+encodeURIComponent(q)).then(r=>r.json())]);
+ const [pend,ent]=await Promise.all([fetch('api/pending').then(r=>r.json()).catch(()=>[]),fetch('api/entries?type='+t+'&q='+encodeURIComponent(q)).then(r=>r.json())]);
  let h='';
  if(pend.length){h+='<h3>Pending review ('+pend.length+')</h3>'+pend.map(p=>`<div class=card>${bdg(p.type)} <strong>${esc(p.topic)}</strong> <span class=meta>${p.path}</span>${(p.conflicts&&p.conflicts.length)?` <span class="pill off">⚠ ${p.conflicts.length} conflict</span>`:''}<div class=acts><button class=btn onclick="view('${p.path}')">view</button><button class=btn onclick="approve('${p.path}')">approve</button><button class="btn danger" onclick="rejectP('${p.path}')">reject</button></div></div>`).join('')}
  h+='<h3>Knowledge entries</h3>'+(ent.length?ent.map(e=>`<div class=card>${bdg(e.type)} <strong>${esc(e.topic)||'(no topic)'}</strong> <span class=meta>${e.scope||''} · ${e.path}</span> <span class="pill ${e.active?'on':'off'}">${e.active?'active':'retired'}</span><div class=acts><button class=btn onclick="view('${e.path}')">view / edit</button>${e.active?`<button class="btn danger" onclick="retire('${e.path}')">retire</button>`:''}</div></div>`).join(''):'<div class=meta>No entries.</div>');
  $('#entries').innerHTML=h}
-async function view(p){const d=await (await fetch('/api/entry?path='+encodeURIComponent(p))).json();$('#mtitle').textContent=p.split('/').pop();$('#mpath').textContent=p;$('#mcontent').value=d.content;$('#mcontent').dataset.path=p;openM('modal')}
-async function saveEntry(){const p=$('#mcontent').dataset.path;const r=await fetch('/api/update',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p,content:$('#mcontent').value})});if(r.ok){toast('Saved & reindexed');cls('modal');reloadCur()}else{const e=await r.json().catch(()=>({}));toast('Save failed: '+(e.detail||r.status))}}
-async function retire(p){if(!confirm('Retire this entry? (sets invalid_at; file kept)'))return;const r=await fetch('/api/retire',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p})});if(r.ok){toast('Retired');reloadCur()}else toast('Retire failed')}
-async function approve(p){const r=await fetch('/api/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p,approver:$('#approver').value||'me'})});if(r.ok){toast('Approved');loadEntries()}else toast('Approve failed')}
-async function rejectP(p){if(!confirm('Reject and delete this pending proposal?'))return;const r=await fetch('/api/reject',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p})});if(r.ok){toast('Rejected');loadEntries()}else toast('Reject failed')}
+async function view(p){const d=await (await fetch('api/entry?path='+encodeURIComponent(p))).json();$('#mtitle').textContent=p.split('/').pop();$('#mpath').textContent=p;$('#mcontent').value=d.content;$('#mcontent').dataset.path=p;openM('modal')}
+async function saveEntry(){const p=$('#mcontent').dataset.path;const r=await fetch('api/update',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p,content:$('#mcontent').value})});if(r.ok){toast('Saved & reindexed');cls('modal');reloadCur()}else{const e=await r.json().catch(()=>({}));toast('Save failed: '+(e.detail||r.status))}}
+async function retire(p){if(!confirm('Retire this entry? (sets invalid_at; file kept)'))return;const r=await fetch('api/retire',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p})});if(r.ok){toast('Retired');reloadCur()}else toast('Retire failed')}
+async function approve(p){const r=await fetch('api/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p,approver:$('#approver').value||'me'})});if(r.ok){toast('Approved');loadEntries()}else toast('Approve failed')}
+async function rejectP(p){if(!confirm('Reject and delete this pending proposal?'))return;const r=await fetch('api/reject',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p})});if(r.ok){toast('Rejected');loadEntries()}else toast('Reject failed')}
 function newEntry(preset){if(preset)$('#etype').value=preset;openM('emodal')}
-async function submitEntry(){const b={type:$('#etype').value,topic:$('#etopic').value,scope:$('#escope').value,content:$('#econtent').value};const r=await fetch('/api/propose',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)});if(r.ok){const d=await r.json();toast(d.approved?'Created & approved':'Proposed for review');cls('emodal');$('#etopic').value='';$('#econtent').value='';reloadCur()}else{const e=await r.json().catch(()=>({}));toast('Failed: '+(e.detail||r.status))}}
-async function submitRule(){const b={tool:$('#rtool').value,pattern:$('#rpattern').value,message:$('#rmessage').value};const r=await fetch('/api/guardrail-rule',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)});if(r.ok){toast('Rule added');cls('rmodal');$('#rpattern').value='';$('#rmessage').value='';loadGuard()}else{const e=await r.json().catch(()=>({}));toast('Failed: '+(e.detail||r.status))}}
+async function submitEntry(){const b={type:$('#etype').value,topic:$('#etopic').value,scope:$('#escope').value,content:$('#econtent').value};const r=await fetch('api/propose',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)});if(r.ok){const d=await r.json();toast(d.approved?'Created & approved':'Proposed for review');cls('emodal');$('#etopic').value='';$('#econtent').value='';reloadCur()}else{const e=await r.json().catch(()=>({}));toast('Failed: '+(e.detail||r.status))}}
+async function submitRule(){const b={tool:$('#rtool').value,pattern:$('#rpattern').value,message:$('#rmessage').value};const r=await fetch('api/guardrail-rule',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)});if(r.ok){toast('Rule added');cls('rmodal');$('#rpattern').value='';$('#rmessage').value='';loadGuard()}else{const e=await r.json().catch(()=>({}));toast('Failed: '+(e.detail||r.status))}}
 const ALBL={'human.create':'created','human.approve':'approved','human.reject':'rejected','human.retire':'retired','human.edit':'edited','human.rule':'added rule'};
-async function loadAudit(){const d=await (await fetch('/api/audit')).json();
+async function loadAudit(){const d=await (await fetch('api/audit')).json();
  $('#activity').innerHTML='<h3>Human actions (most recent)</h3>'+(d.length?d.map(e=>`<div class=card><span class=meta>${(e.ts||'').replace('T',' ').slice(0,16)}</span> &nbsp;<strong>${ALBL[e.tool]||e.tool}</strong> &nbsp;<span class=meta>${esc(e.query)}</span></div>`).join(''):'<div class=meta>No human actions logged yet — approvals, edits, retires and creations show here.</div>')}
 const _np=new URLSearchParams(location.search).get('new');
 if(_np){tab('browse');setTimeout(()=>{$('#etopic').value=_np;openM('emodal')},60)}else{tab('search')}
@@ -1469,8 +1469,8 @@ function openDrawer(name) {
     <div class="drawer-section">
       <h4>Path</h4>
       <div class="drawer-path">${esc(s.root || '?')}</div>
-      <div class="drawer-cmd">cd ${esc(s.root || '?')} &amp;&amp; cruxhive ui</div>
-      <div class="kpi-sub" style="margin-top:.35rem">Opens this project's dedicated UI with Approvals · Usage · By AI Tool · Gaps tabs.</div>
+      <a href="/p/${encodeURIComponent(name)}/" style="display:inline-block;margin-top:.55rem;padding:.4rem .8rem;border:1px solid #3a2f14;border-radius:.35rem;color:#f5a524;text-decoration:none;font-size:.82rem">Open full project view →</a>
+      <div class="kpi-sub" style="margin-top:.4rem">Dashboard · Usage · By AI Tool · Gaps · Knowledge &amp; guardrails (Manage)</div>
     </div>`);
 
   // KPI summary
@@ -1569,4 +1569,30 @@ def make_workspace_app() -> "FastAPI":  # type: ignore[name-defined]
         agg = _ws.aggregate([s for s in snaps if not s.get("error")])
         return {"aggregate": agg, "projects": snaps}
 
+    return app
+
+
+def make_unified_app() -> "FastAPI":  # type: ignore[name-defined]
+    """Unified UI: workspace rollup at `/`, each project mounted at `/p/{name}/`.
+
+    Clicking a project in the rollup drills into its full per-project app
+    (dashboard + Manage) — one URL, one process, no port juggling. The
+    per-project templates use relative API paths so they work both standalone
+    (`make_app`) and mounted here.
+    """
+    if not _FASTAPI_AVAILABLE:
+        raise ImportError("fastapi not installed. Run: uv tool install 'cruxhive-mcp[ui]'")
+    from .. import workspace as _ws
+
+    app = make_workspace_app()
+    seen: set[str] = set()
+    for rootp in _ws.list_projects():
+        name = rootp.name
+        if name in seen:
+            continue
+        seen.add(name)
+        try:
+            app.mount(f"/p/{name}", make_app(str(rootp)))
+        except Exception:
+            pass
     return app
