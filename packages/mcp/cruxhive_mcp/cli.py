@@ -43,11 +43,11 @@ def ui() -> None:
             print(ui.__doc__)
             return
 
-    from .ui import make_app, make_workspace_app  # type: ignore[attr-defined]
+    from .ui import make_app, make_unified_app  # type: ignore[attr-defined]
 
-    app = make_workspace_app() if workspace else make_app()
+    app = make_unified_app() if workspace else make_app()
     print(f"  \033[32m✓\033[0m  CruxHive UI → http://{host}:{port}"
-          f"{'  (workspace mode)' if workspace else ''}")
+          f"{'  (workspace + per-project drill-in)' if workspace else ''}")
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
@@ -1023,6 +1023,268 @@ def search() -> None:
             "context_workspace_search" if workspace_mode else "context_search",
             query=args[0], result_n=result_n, ms=ms,
         )
+
+
+def inject() -> None:
+    """cruxhive-inject: UserPromptSubmit hook — auto-retrieve project knowledge.
+
+    Reads the Claude Code / OpenCode UserPromptSubmit JSON payload on stdin,
+    searches the project's .llm/ knowledge base, and prints the top relevant
+    entries to stdout so they are injected into the model's context for that
+    turn. This is the forcing function: retrieval-as-context, not
+    retrieval-as-tool — the model no longer has to *decide* to search.
+
+    Contract: NEVER block or break the prompt. Any error, trivial prompt, or
+    empty result -> exit 0 with no output. Each retrieval is logged to events
+    (client_name='hook') so it surfaces in stats/dashboard.
+    """
+    import json
+    import re
+    import time as _time
+
+    TOP_N = 3
+    MAX_SNIPPET = 220
+
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        return
+
+    prompt = (payload.get("prompt") or "").strip()
+    cwd = payload.get("cwd") or os.getcwd()
+
+    # Skip trivial prompts ("yes", "continue", greetings) — avoid noise + log spam
+    if len(prompt) < 15 or len(re.findall(r"[A-Za-z0-9]", prompt)) < 8:
+        return
+    if not os.path.isdir(os.path.join(cwd, ".llm")):
+        return
+
+    from . import events as _events
+    from . import store as _store
+
+    t0 = _time.perf_counter()
+    try:
+        conn = _store.connect(cwd)
+        # search_bm25 now keyword-ORs internally (store.fts_or_query), so the
+        # raw prompt is fine here; rrf_fuse keeps the raw prompt for entity boost.
+        bm25 = _store.search_bm25(conn, prompt, 8)
+        hits = _store.rrf_fuse(bm25, [], conn=conn, query=prompt)[:6]
+        conn.close()
+    except Exception:
+        return
+
+    seen: set[str] = set()
+    picked: list[tuple[str, str, str, str]] = []
+    for h in hits:
+        path = h.get("path") or ""
+        if path == ".llm/CONTEXT.md" or path in seen:  # CONTEXT.md is already loaded
+            continue
+        snippet = re.sub(r"\[([^\[\]\n]{1,40})\]", r"\1", h.get("snippet") or "")
+        snippet = snippet.replace("\n", " ").strip()
+        if not snippet:
+            continue
+        if len(snippet) > MAX_SNIPPET:
+            snippet = snippet[:MAX_SNIPPET] + "…"
+        seen.add(path)
+        label = h.get("topic") or os.path.splitext(os.path.basename(path))[0]
+        picked.append((h.get("type") or "note", label, path, snippet))
+        if len(picked) >= TOP_N:
+            break
+
+    try:
+        _events.set_client("hook", "")
+        _events.log(cwd, "context_search", query=prompt, result_n=len(picked),
+                    ms=int((_time.perf_counter() - t0) * 1000))
+    except Exception:
+        pass
+
+    if not picked:
+        return
+
+    lines = [
+        "<cruxhive-knowledge>",
+        "Relevant prior knowledge auto-retrieved from this project's CruxHive KB "
+        "for the prompt above. Treat any [decision]/[constraint] as binding unless "
+        "the user overrides it; if you act against one, say so explicitly. If a "
+        "relevant decision/constraint is MISSING here, propose it via context_propose.",
+        "",
+    ]
+    for typ, label, path, snippet in picked:
+        lines.append(f"• [{typ}] {label} ({path}): {snippet}")
+    lines.append("</cruxhive-knowledge>")
+    print("\n".join(lines))
+
+
+_BUILTIN_GUARDRAILS = [
+    ("block", "secrets-hygiene", "git add/commit of .env / keys / credentials"),
+    ("block", "no-force-push-main", "git push --force to main/master"),
+    ("block", "migration-immutable", "edits to */migrations|alembic/versions/*.py"),
+    ("warn", "deploy-safety", "deploy_prod.sh (production) — confirm staging first"),
+]
+
+
+def _guardrails_list() -> None:
+    """Render every active guardrail for the current project (cruxhive-guardrails --list)."""
+    G, Y, D, R, B = "\033[32m", "\033[33m", "\033[2m", "\033[0m", "\033[1m"
+    cwd = os.getcwd()
+    print(f"\n{B}CruxHive guardrails{R} — {os.path.basename(cwd.rstrip('/')) or cwd}\n")
+
+    print(f"{B}Built-in{R} {D}(always on){R}")
+    for kind, name, desc in _BUILTIN_GUARDRAILS:
+        tag = f"{G}[block]{R}" if kind == "block" else f"{Y}[warn] {R}"
+        print(f"  {tag} {name:<20} {D}{desc}{R}")
+
+    print(f"\n{B}Project rules{R} {D}(.llm/guardrails.toml){R}")
+    rules = []
+    cfg = os.path.join(cwd, ".llm", "guardrails.toml")
+    if os.path.exists(cfg):
+        try:
+            import tomllib
+            with open(cfg, "rb") as f:
+                rules = tomllib.load(f).get("deny", [])
+        except Exception:
+            pass
+    if rules:
+        for d in rules:
+            msg = (d.get("message", "") or "")[:55]
+            print(f"  {G}[block]{R} {D}{d.get('tool', 'Bash')}:{R} {d.get('pattern')}  {D}— {msg}{R}")
+    else:
+        print(f"  {D}none — add [[deny]] entries to .llm/guardrails.toml{R}")
+
+    print(f"\n{B}Knowledge constraints{R} {D}(surfaced to the agent){R}")
+    rows = []
+    try:
+        from . import store as _store
+        conn = _store.connect(cwd)
+        rows = conn.execute(
+            "SELECT topic, scope, invalid_at FROM entries "
+            "WHERE type='constraint' ORDER BY topic"
+        ).fetchall()
+        conn.close()
+    except Exception:
+        pass
+    if rows:
+        for r in rows:
+            inv = r["invalid_at"]
+            active = inv in (None, "", "~", "null", "none")
+            state = f"{G}active{R}" if active else f"{D}retired ({inv}){R}"
+            print(f"  [constraint] {r['topic'] or '(no topic)':<22} {D}{r['scope']}{R}  {state}")
+    else:
+        print(f"  {D}none — add via: cruxhive-propose constraint <topic>{R}")
+
+    print(f"\n{B}Manage{R}")
+    print(f"  {D}add deny rule  →{R} edit .llm/guardrails.toml")
+    print(f"  {D}add constraint →{R} cruxhive-propose constraint <topic>")
+    print(f"  {D}retire         →{R} set invalid_at in the entry / remove the toml rule")
+    print()
+
+
+def guardrails() -> None:
+    """cruxhive-guardrails: guardrail enforcement + inspection.
+
+    No args (PreToolUse hook): reads the Claude Code payload on stdin and BLOCKS
+    (exit 2, reason on stderr) actions that violate high-stakes guardrails —
+    committing secrets, force-pushing protected branches, editing merged
+    migrations. Soft actions (prod deploy) pass with a warning. Any unexpected
+    error -> allow (fail open): a guardrail bug must never brick the workflow.
+
+    `--list` / `-l`: print all active guardrails for the current project
+    (built-in rules + .llm/guardrails.toml + knowledge constraints).
+
+    Projects extend the default set via .llm/guardrails.toml — [[deny]] entries
+    with tool = "Bash" | "path", pattern = "<regex>", message = "...".
+    """
+    if any(a in ("--list", "-l") for a in sys.argv[1:]):
+        _guardrails_list()
+        return
+
+    import json
+    import re as _re
+
+    bash_deny = [
+        ("secrets-hygiene",
+         _re.compile(r"\bgit\s+(add|commit)\b", _re.I),
+         _re.compile(r"\.env(\.|\b)|id_rsa|\.pem\b|\.key\b|credentials|\.npmrc|"
+                     r"\.pypirc|secrets?\.(ya?ml|json|toml)", _re.I),
+         "Guardrail [secrets-hygiene]: refusing to git add/commit a secret file "
+         "(.env / key / credentials). Keep secrets out of the repo; add to .gitignore."),
+        ("no-force-push-main",
+         _re.compile(r"\bgit\s+push\b.*(--force\b|-f\b)", _re.I),
+         _re.compile(r"\b(main|master)\b", _re.I),
+         "Guardrail [no-force-push-main]: force-push to main/master is blocked. "
+         "Rewrite history on a feature branch."),
+    ]
+    path_deny = [
+        ("migration-immutable",
+         _re.compile(r"(migrations|alembic)/versions/.+\.py$", _re.I),
+         "Guardrail [migration-immutable]: merged migration files are immutable. "
+         "Add a new revision (expand-contract) instead of editing in place."),
+    ]
+    bash_warn = [
+        (_re.compile(r"deploy_prod\.sh", _re.I),
+         "Guardrail [deploy-safety]: targets PRODUCTION directly — confirm it was "
+         "tested on staging first."),
+    ]
+
+    block_msg = None
+    try:
+        payload = json.load(sys.stdin)
+        tool = payload.get("tool_name") or ""
+        ti = payload.get("tool_input") or {}
+        cwd = payload.get("cwd") or os.getcwd()
+
+        extra_bash: list = []
+        extra_path: list = []
+        cfg = os.path.join(cwd, ".llm", "guardrails.toml")
+        if os.path.exists(cfg):
+            try:
+                import tomllib
+                with open(cfg, "rb") as f:
+                    data = tomllib.load(f)
+                for d in data.get("deny", []):
+                    rx = _re.compile(d["pattern"], _re.I)
+                    msg = d.get("message",
+                                f"Guardrail: blocked by .llm/guardrails.toml ({d.get('pattern')})")
+                    if d.get("tool") == "path":
+                        extra_path.append((rx, msg))
+                    else:
+                        extra_bash.append((_re.compile(r".*"), rx, msg))
+            except Exception:
+                pass
+
+        if tool == "Bash":
+            cmd = ti.get("command") or ""
+            for _l, trig, targ, msg in bash_deny:
+                if trig.search(cmd) and targ.search(cmd):
+                    block_msg = msg
+                    break
+            if block_msg is None:
+                for trig, targ, msg in extra_bash:
+                    if trig.search(cmd) and targ.search(cmd):
+                        block_msg = msg
+                        break
+            if block_msg is None:
+                for rx, msg in bash_warn:
+                    if rx.search(cmd):
+                        sys.stderr.write(msg + "\n")  # visible, non-blocking
+                        break
+        elif tool in ("Edit", "Write", "NotebookEdit"):
+            fp = ti.get("file_path") or ti.get("notebook_path") or ""
+            for _l, rx, msg in path_deny:
+                if rx.search(fp):
+                    block_msg = msg
+                    break
+            if block_msg is None:
+                for rx, msg in extra_path:
+                    if rx.search(fp):
+                        block_msg = msg
+                        break
+    except Exception:
+        block_msg = None  # fail open
+
+    if block_msg:
+        sys.stderr.write(block_msg + "\n")
+        sys.exit(2)
 
 
 def reject() -> None:

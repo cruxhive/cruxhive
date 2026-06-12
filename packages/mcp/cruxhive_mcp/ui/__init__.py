@@ -20,6 +20,83 @@ except ImportError:
 from .. import events as _events
 from .. import store as _store
 
+# Request models MUST live at module scope: with `from __future__ import
+# annotations`, FastAPI resolves body-model hints via the module globals — a
+# model defined inside make_app() is invisible to it and gets mis-bound as a
+# query param (HTTP 422).
+if _FASTAPI_AVAILABLE:
+    class ApproveReq(BaseModel):
+        path: str
+        approver: str
+
+    class RejectReq(BaseModel):
+        path: str
+
+    class RetireReq(BaseModel):
+        path: str
+
+    class UpdateReq(BaseModel):
+        path: str
+        content: str
+
+    class ProposeReq(BaseModel):
+        type: str
+        topic: str
+        scope: str = "project"
+        content: str
+
+    class RuleReq(BaseModel):
+        tool: str = "Bash"
+        pattern: str
+        message: str = ""
+
+
+_VALID_TYPES = {"fact", "decision", "plan", "pattern", "constraint", "research", "outcome"}
+
+
+def _propose_entry(root: str, etype: str, topic: str, scope: str, content: str):
+    """Create a knowledge entry from the UI (mirrors cruxhive-propose).
+
+    Returns (relative_path, approved: bool). Raises ValueError on bad input.
+    """
+    import datetime
+    from pathlib import Path
+    from .. import store as _store
+    from .. import workspace as _ws
+
+    etype = (etype or "").strip()
+    topic = (topic or "").strip()
+    content = (content or "").strip()
+    if etype not in _VALID_TYPES:
+        raise ValueError(f"Invalid type '{etype}'. Use: {', '.join(sorted(_VALID_TYPES))}")
+    if not topic or not content:
+        raise ValueError("topic and content are required")
+
+    date = datetime.date.today().isoformat()
+    slug = topic.lower().replace(" ", "-").replace("/", "-")[:40]
+    pending = Path(root) / ".llm" / "pending"
+    pending.mkdir(parents=True, exist_ok=True)
+    fpath = pending / f"{etype}_{slug}.md"
+    i = 1
+    while fpath.exists():
+        fpath = pending / f"{etype}_{slug}_{i}.md"
+        i += 1
+
+    solo_enabled, solo_approver = _ws.is_solo()
+    source_val = "human" if solo_enabled else "ai-proposed"
+    approved_by = solo_approver if solo_enabled else "~"
+    fpath.write_text(
+        f"---\ntype: {etype}\nscope: {scope or 'project'}\ntopic: {topic}\n"
+        f"valid_at: {date}\ninvalid_at: ~\nconfidence: medium\n"
+        f"source: {source_val}\napproved_by: {approved_by}\n---\n\n{content}\n",
+        encoding="utf-8",
+    )
+    try:
+        _store.index(root)
+    except Exception:
+        pass
+    return str(fpath.relative_to(root)), bool(solo_enabled)
+
 # Path to bundled docs/guide.html (force-included by hatchling at wheel build).
 # Falls back to repo path when running editable from source.
 _BUNDLED_DOCS = Path(__file__).parent.parent / "static" / "guide.html"
@@ -185,7 +262,10 @@ _HTML = """<!doctype html>
     <h1>crux<span>hive</span></h1>
   </a>
   <div class="stats" id="stats"></div>
-  <a href="/docs" target="_blank" rel="noopener" title="Open the CruxHive guide in a new tab"
+  <a href="manage" title="Search, browse & manage knowledge + guardrails"
+     style="color:#f5a524;font-size:.78rem;text-decoration:none;
+            padding:.35rem .7rem;border:1px solid #3a2f14;border-radius:.3rem;margin-right:.4rem">🛡 Manage</a>
+  <a href="docs" target="_blank" rel="noopener" title="Open the CruxHive guide in a new tab"
      style="color:#94a3b8;font-size:.78rem;text-decoration:none;
             padding:.35rem .7rem;border:1px solid #2a2a2a;border-radius:.3rem">Docs ↗</a>
 </header>
@@ -329,7 +409,7 @@ function kpiClass(value, thresholds, lowerIsBetter=false) {
 }
 
 async function loadKpiStrip() {
-  const r = await fetch('/api/kpis');
+  const r = await fetch('api/kpis');
   if (!r.ok) return;
   const k = await r.json();
   const hitRate = k.searches ? Math.round((k.hits / k.searches) * 100) : null;
@@ -371,8 +451,8 @@ async function loadKpiStrip() {
 
 async function loadApprovals() {
   const [pRes, sRes] = await Promise.all([
-    fetch('/api/pending'),
-    fetch('/api/stats'),
+    fetch('api/pending'),
+    fetch('api/stats'),
   ]);
   const pending = await pRes.json();
   renderHeader(await sRes.json());
@@ -411,7 +491,7 @@ async function loadApprovals() {
 
 async function loadUsage() {
   const d = document.getElementById('usage-days').value;
-  const data = await (await fetch(`/api/usage?days=${d}`)).json();
+  const data = await (await fetch(`api/usage?days=${d}`)).json();
   const s = data.summary, p = data.pending;
   const hitPct = s.searches ? (s.hit_rate * 100).toFixed(0) + '%' : '—';
   document.getElementById('usage-kpis').innerHTML = `
@@ -447,7 +527,7 @@ async function loadUsage() {
 
 async function loadModels() {
   const d = document.getElementById('models-days').value;
-  const rows = await (await fetch(`/api/by-tool?days=${d}`)).json();
+  const rows = await (await fetch(`api/by-tool?days=${d}`)).json();
   const tb = document.getElementById('models-tbody');
   if (!rows.length) {
     tb.innerHTML = '<tr><td colspan="7" class="empty">No tool calls logged yet.</td></tr>';
@@ -469,8 +549,8 @@ async function loadModels() {
 
 async function loadGaps() {
   const [g, s] = await Promise.all([
-    fetch('/api/gaps').then(r => r.json()),
-    fetch('/api/stale').then(r => r.json()),
+    fetch('api/gaps').then(r => r.json()),
+    fetch('api/stale').then(r => r.json()),
   ]);
   const gl = document.getElementById('gaps-list');
   gl.innerHTML = g.length
@@ -479,6 +559,8 @@ async function loadGaps() {
           <span class="gap-q">${x.query}</span>
           <span class="pill">${x.times}×</span>
           <span class="pill">${x.clients || '?'}</span>
+          <a href="manage?new=${encodeURIComponent(x.query)}"
+             style="color:#f5a524;font-size:.72rem;margin-left:auto;text-decoration:none">document →</a>
         </div>`).join('')
     : '<div class="empty">No zero-result queries — AI is finding what it needs ✓</div>';
 
@@ -490,28 +572,40 @@ async function loadGaps() {
           ${badge(x.type)}
           <span class="path" style="flex:1">${x.path}</span>
           <span class="pill">${d}</span>
+          <button onclick="retireStale('${x.path}')"
+            style="background:transparent;border:1px solid #2a2a2a;color:#f87171;border-radius:.3rem;font-size:.72rem;padding:.2rem .5rem;cursor:pointer">retire</button>
         </div>`;
       }).join('')
     : '<div class="empty">No stale entries — knowledge base is fresh ✓</div>';
 }
 
+async function retireStale(p) {
+  if (!confirm('Retire ' + p + '?\\n(sets invalid_at; file kept, not deleted)')) return;
+  const r = await fetch('api/retire', {
+    method: 'POST', headers: {'content-type': 'application/json'},
+    body: JSON.stringify({path: p})
+  });
+  if (r.ok) { toast('Retired ✓', true); loadGaps(); }
+  else { toast('Retire failed', false); }
+}
+
 async function approve(path) {
   if (!approver) { toast('Enter your name first', false); return; }
-  const res = await fetch('/api/approve', {
+  const res = await fetch('api/approve', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({path, approver}),
   });
   if (res.ok) {
     toast(`Approved: ${path.split('/').pop()}`);
     document.getElementById('card-' + btoa(path))?.remove();
-    renderHeader(await (await fetch('/api/stats')).json());
+    renderHeader(await (await fetch('api/stats')).json());
   } else {
     toast('Approve failed', false);
   }
 }
 
 async function reject(path) {
-  const res = await fetch('/api/reject', {
+  const res = await fetch('api/reject', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({path}),
   });
@@ -530,6 +624,134 @@ loadApprovals();
 </html>"""
 
 
+_MANAGE_HTML = """<!doctype html><html><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>CruxHive · Manage</title>
+<style>
+:root{--bg:#0c0a09;--panel:#1c1917;--line:#292524;--fg:#e7e5e4;--dim:#a8a29e;--amber:#f59e0b;--green:#34d399;--red:#f87171}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 'IBM Plex Sans',system-ui,sans-serif}
+a{color:var(--amber);text-decoration:none}
+header{display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:1px solid var(--line)}
+header h1{font-size:16px;margin:0;font-weight:700}header .sp{flex:1}
+.tabs{display:flex;gap:6px;padding:12px 22px 0}
+.tab{padding:8px 16px;border:1px solid var(--line);border-bottom:none;border-radius:8px 8px 0 0;cursor:pointer;color:var(--dim);background:transparent}
+.tab.on{color:var(--fg);background:var(--panel);border-color:var(--line)}
+.wrap{padding:18px 22px;max-width:1000px}
+input,select,textarea{background:var(--panel);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:9px 11px;font:inherit}
+input[type=text]{width:100%}
+.row{display:flex;gap:10px;margin-bottom:14px;align-items:center}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.badge{font-size:11px;padding:2px 8px;border-radius:999px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.b-constraint{background:#3b1414;color:#f87171}.b-decision{background:#1e2d3b;color:#38bdf8}
+.b-fact{background:#1c2b1c;color:#86efac}.b-plan{background:#2d2a14;color:#fcd34d}
+.b-pattern{background:#2a1e34;color:#c4b5fd}.b-outcome,.b-research,.b-note{background:#27241f;color:#a8a29e}
+.meta{color:var(--dim);font-size:12px}.snip{color:var(--dim);margin-top:6px;font-size:13px}
+.btn{background:transparent;border:1px solid var(--line);color:var(--fg);border-radius:7px;padding:5px 11px;cursor:pointer;font:inherit}
+.btn:hover{border-color:var(--amber)}.btn.danger:hover{border-color:var(--red);color:var(--red)}
+.pill{font-size:11px;padding:2px 8px;border-radius:999px}.pill.on{background:#11251c;color:var(--green)}.pill.off{background:#251111;color:var(--red)}
+.g-block{color:var(--green);font-weight:600}.g-warn{color:var(--amber);font-weight:600}
+.acts{display:flex;gap:8px;margin-top:8px}
+.modal{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;padding:20px}
+.modal.on{display:flex}.modal .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;width:760px;max-width:100%;max-height:86vh;display:flex;flex-direction:column}
+.modal .box header{justify-content:space-between}.modal textarea{flex:1;min-height:360px;margin:14px;font:13px/1.5 'IBM Plex Mono',monospace;resize:vertical}
+.modal .foot{padding:0 14px 14px;display:flex;gap:8px;justify-content:flex-end}
+h3{margin:18px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);padding:10px 16px;border-radius:8px;opacity:0;transition:.2s}
+.toast.on{opacity:1}
+</style></head><body>
+<header><h1>🛡 CruxHive · Manage</h1><span id=proj class=meta></span><span class=sp></span><a href="./">← dashboard</a></header>
+<div class=tabs>
+ <div class=tab data-t=search onclick=tab('search')>Search</div>
+ <div class=tab data-t=guard onclick=tab('guard')>Guardrails</div>
+ <div class=tab data-t=browse onclick=tab('browse')>Browse &amp; manage</div>
+ <div class=tab data-t=activity onclick=tab('activity')>Activity</div>
+</div>
+<div class=wrap>
+ <div id=search style=display:none>
+   <div class=row><input id=q type=text placeholder="Search the knowledge base…" onkeydown="if(event.key=='Enter')doSearch()"><button class=btn onclick=doSearch()>Search</button></div>
+   <div id=searchres><div class=meta>Type a query and hit Enter.</div></div>
+ </div>
+ <div id=guard style=display:none></div>
+ <div id=browse style=display:none>
+   <div class=row>
+     <select id=ftype onchange=loadEntries()>
+       <option value="">all types</option><option>constraint</option><option>decision</option>
+       <option>fact</option><option>pattern</option><option>plan</option><option>research</option><option>outcome</option>
+     </select>
+     <input id=fq type=text placeholder="filter by topic / path…" oninput=loadEntries()>
+     <input id=approver type=text placeholder="approver" value=me style=max-width:120px>
+     <button class=btn onclick="newEntry()">+ New entry</button>
+   </div>
+   <div id=entries></div>
+ </div>
+ <div id=activity style=display:none></div>
+</div>
+<div class=modal id=modal><div class=box>
+  <header><strong id=mtitle></strong><button class=btn onclick="cls('modal')">✕</button></header>
+  <textarea id=mcontent spellcheck=false></textarea>
+  <div class=foot><span id=mpath class=meta style=margin-right:auto></span>
+    <button class=btn onclick="cls('modal')">Cancel</button><button class=btn onclick=saveEntry()>Save</button></div>
+</div></div>
+<div class=modal id=emodal><div class=box>
+  <header><strong>New entry</strong><button class=btn onclick="cls('emodal')">✕</button></header>
+  <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
+    <div class=row style=margin:0>
+      <select id=etype><option>constraint</option><option>decision</option><option>fact</option><option>pattern</option><option>plan</option><option>research</option><option>outcome</option></select>
+      <select id=escope><option>project</option><option>org</option><option>personal</option></select>
+    </div>
+    <input id=etopic type=text placeholder="topic (1-3 words, e.g. deploy-safety)">
+    <textarea id=econtent placeholder="The rule/fact. End with **Why:** the rationale." style="min-height:200px;margin:0;font:13px/1.5 'IBM Plex Mono',monospace"></textarea>
+  </div>
+  <div class=foot><button class=btn onclick="cls('emodal')">Cancel</button><button class=btn onclick=submitEntry()>Create</button></div>
+</div></div>
+<div class=modal id=rmodal><div class=box>
+  <header><strong>New deny rule</strong><button class=btn onclick="cls('rmodal')">✕</button></header>
+  <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
+    <select id=rtool><option value=Bash>Bash — match the shell command</option><option value=path>path — match the Edit/Write file path</option></select>
+    <input id=rpattern type=text placeholder="regex, e.g. rm -rf / or config/prod\\.ya?ml$">
+    <input id=rmessage type=text placeholder="message shown when blocked">
+  </div>
+  <div class=foot><button class=btn onclick="cls('rmodal')">Cancel</button><button class=btn onclick=submitRule()>Add rule</button></div>
+</div></div>
+<div class=toast id=toast></div>
+<script>
+const $=s=>document.querySelector(s);let cur='search';
+function openM(id){$('#'+id).classList.add('on')}function cls(id){$('#'+id).classList.remove('on')}
+function tab(t){cur=t;['search','guard','browse','activity'].forEach(x=>{$('#'+x).style.display=x==t?'block':'none';document.querySelector('.tab[data-t='+x+']').classList.toggle('on',x==t)});if(t=='guard')loadGuard();if(t=='browse')loadEntries();if(t=='activity')loadAudit()}
+function bdg(t){return `<span class="badge b-${t||'note'}">${t||'note'}</span>`}
+function esc(s){return (s||'').replace(/[<>]/g,'')}
+function toast(m){const e=$('#toast');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),2000)}
+function reloadCur(){if(cur=='guard')loadGuard();else if(cur=='browse')loadEntries()}
+async function doSearch(){const q=$('#q').value.trim();if(!q)return;const d=await (await fetch('api/search?q='+encodeURIComponent(q))).json();
+ $('#searchres').innerHTML=d.length?d.map(h=>`<div class=card>${bdg(h.type)} <strong>${esc(h.topic)}</strong> <span class=meta>${esc(h.scope)} · ${h.path}</span><div class=snip>${esc(h.snippet)}</div><div class=acts><button class=btn onclick="view('${h.path}')">view / edit</button></div></div>`).join(''):'<div class=meta>No results.</div>'}
+async function loadGuard(){const d=await (await fetch('api/guardrails')).json();
+ let h='<div class=row style="justify-content:flex-end"><button class=btn onclick="newEntry(\\'constraint\\')">+ Add constraint</button><button class=btn onclick="openM(\\'rmodal\\')">+ Add deny rule</button></div>';
+ h+='<h3>Built-in (always on)</h3>'+d.builtin.map(g=>`<div class=card><span class="${g.kind=='block'?'g-block':'g-warn'}">[${g.kind}]</span> <strong>${g.name}</strong><div class=snip>${g.desc}</div></div>`).join('');
+ h+='<h3>Project rules (.llm/guardrails.toml)</h3>'+(d.rules.length?d.rules.map(r=>`<div class=card><span class=g-block>[block]</span> <span class=meta>${r.tool||'Bash'}:</span> <code>${esc(r.pattern)}</code><div class=snip>${esc(r.message)}</div></div>`).join(''):'<div class=meta>None — click “+ Add deny rule”.</div>');
+ h+='<h3>Knowledge constraints</h3>'+(d.constraints.length?d.constraints.map(c=>`<div class=card>${bdg('constraint')} <strong>${esc(c.topic)}</strong> <span class=meta>${c.scope}</span> <span class="pill ${c.active?'on':'off'}">${c.active?'active':'retired'}</span>${c.active?`<div class=acts><button class="btn danger" onclick="retire('.llm/pending/constraint_${c.topic}.md')">retire</button></div>`:''}</div>`).join(''):'<div class=meta>None — click “+ Add constraint”.</div>');
+ $('#guard').innerHTML=h}
+async function loadEntries(){const t=$('#ftype').value,q=$('#fq').value;
+ const [pend,ent]=await Promise.all([fetch('api/pending').then(r=>r.json()).catch(()=>[]),fetch('api/entries?type='+t+'&q='+encodeURIComponent(q)).then(r=>r.json())]);
+ let h='';
+ if(pend.length){h+='<h3>Pending review ('+pend.length+')</h3>'+pend.map(p=>`<div class=card>${bdg(p.type)} <strong>${esc(p.topic)}</strong> <span class=meta>${p.path}</span>${(p.conflicts&&p.conflicts.length)?` <span class="pill off">⚠ ${p.conflicts.length} conflict</span>`:''}<div class=acts><button class=btn onclick="view('${p.path}')">view</button><button class=btn onclick="approve('${p.path}')">approve</button><button class="btn danger" onclick="rejectP('${p.path}')">reject</button></div></div>`).join('')}
+ h+='<h3>Knowledge entries</h3>'+(ent.length?ent.map(e=>`<div class=card>${bdg(e.type)} <strong>${esc(e.topic)||'(no topic)'}</strong> <span class=meta>${e.scope||''} · ${e.path}</span> <span class="pill ${e.active?'on':'off'}">${e.active?'active':'retired'}</span><div class=acts><button class=btn onclick="view('${e.path}')">view / edit</button>${e.active?`<button class="btn danger" onclick="retire('${e.path}')">retire</button>`:''}</div></div>`).join(''):'<div class=meta>No entries.</div>');
+ $('#entries').innerHTML=h}
+async function view(p){const d=await (await fetch('api/entry?path='+encodeURIComponent(p))).json();$('#mtitle').textContent=p.split('/').pop();$('#mpath').textContent=p;$('#mcontent').value=d.content;$('#mcontent').dataset.path=p;openM('modal')}
+async function saveEntry(){const p=$('#mcontent').dataset.path;const r=await fetch('api/update',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p,content:$('#mcontent').value})});if(r.ok){toast('Saved & reindexed');cls('modal');reloadCur()}else{const e=await r.json().catch(()=>({}));toast('Save failed: '+(e.detail||r.status))}}
+async function retire(p){if(!confirm('Retire this entry? (sets invalid_at; file kept)'))return;const r=await fetch('api/retire',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p})});if(r.ok){toast('Retired');reloadCur()}else toast('Retire failed')}
+async function approve(p){const r=await fetch('api/approve',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p,approver:$('#approver').value||'me'})});if(r.ok){toast('Approved');loadEntries()}else toast('Approve failed')}
+async function rejectP(p){if(!confirm('Reject and delete this pending proposal?'))return;const r=await fetch('api/reject',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:p})});if(r.ok){toast('Rejected');loadEntries()}else toast('Reject failed')}
+function newEntry(preset){if(preset)$('#etype').value=preset;openM('emodal')}
+async function submitEntry(){const b={type:$('#etype').value,topic:$('#etopic').value,scope:$('#escope').value,content:$('#econtent').value};const r=await fetch('api/propose',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)});if(r.ok){const d=await r.json();toast(d.approved?'Created & approved':'Proposed for review');cls('emodal');$('#etopic').value='';$('#econtent').value='';reloadCur()}else{const e=await r.json().catch(()=>({}));toast('Failed: '+(e.detail||r.status))}}
+async function submitRule(){const b={tool:$('#rtool').value,pattern:$('#rpattern').value,message:$('#rmessage').value};const r=await fetch('api/guardrail-rule',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)});if(r.ok){toast('Rule added');cls('rmodal');$('#rpattern').value='';$('#rmessage').value='';loadGuard()}else{const e=await r.json().catch(()=>({}));toast('Failed: '+(e.detail||r.status))}}
+const ALBL={'human.create':'created','human.approve':'approved','human.reject':'rejected','human.retire':'retired','human.edit':'edited','human.rule':'added rule'};
+async function loadAudit(){const d=await (await fetch('api/audit')).json();
+ $('#activity').innerHTML='<h3>Human actions (most recent)</h3>'+(d.length?d.map(e=>`<div class=card><span class=meta>${(e.ts||'').replace('T',' ').slice(0,16)}</span> &nbsp;<strong>${ALBL[e.tool]||e.tool}</strong> &nbsp;<span class=meta>${esc(e.query)}</span></div>`).join(''):'<div class=meta>No human actions logged yet — approvals, edits, retires and creations show here.</div>')}
+const _np=new URLSearchParams(location.search).get('new');
+if(_np){tab('browse');setTimeout(()=>{$('#etopic').value=_np;openM('emodal')},60)}else{tab('search')}
+</script></body></html>"""
+
+
 def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name-defined]
     if not _FASTAPI_AVAILABLE:
         raise ImportError(
@@ -538,13 +760,6 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
 
     root = project_root or os.getcwd()
     app = FastAPI(title="CruxHive", docs_url=None, redoc_url=None)
-
-    class ApproveReq(BaseModel):
-        path: str
-        approver: str
-
-    class RejectReq(BaseModel):
-        path: str
 
     @app.get("/", response_class=HTMLResponse)
     def index():
@@ -576,6 +791,7 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
         conn.close()
         if not ok:
             raise HTTPException(404, detail="entry not found")
+        _events.log(root, "human.approve", query=req.path)
         return {"ok": True}
 
     @app.post("/api/reject")
@@ -585,6 +801,7 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
         conn.close()
         if not ok:
             raise HTTPException(404, detail="entry not found")
+        _events.log(root, "human.reject", query=req.path)
         return {"ok": True}
 
     @app.get("/api/kpis")
@@ -641,6 +858,173 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
         rows = _events.stale_entries(conn, days=days)
         conn.close()
         return rows
+
+    # ── Human gate: see / search / manage ────────────────────────────────
+    @app.get("/manage", response_class=HTMLResponse)
+    def manage_page():
+        return _MANAGE_HTML
+
+    def _safe_entry_path(path: str) -> str:
+        if ".." in path or not path.startswith(".llm/"):
+            raise HTTPException(400, detail="invalid path")
+        fp = os.path.join(root, path)
+        if not os.path.exists(fp):
+            raise HTTPException(404, detail="entry not found")
+        return fp
+
+    @app.get("/api/search")
+    def api_search(q: str, n: int = 25):
+        if not q.strip():
+            return []
+        conn = _store.connect(root)
+        bm25 = _store.search_bm25(conn, q, n)
+        hits = _store.rrf_fuse(bm25, [], conn=conn, query=q)[:n]
+        conn.close()
+        return [{
+            "path": h.get("path"), "topic": h.get("topic"), "type": h.get("type"),
+            "scope": h.get("scope"), "snippet": (h.get("snippet") or "")[:240],
+        } for h in hits]
+
+    @app.get("/api/entries")
+    def api_entries(type: str = "", q: str = ""):
+        # List from disk (not the index) so RETIRED entries remain visible/manageable —
+        # the indexer drops invalidated entries from the entries table.
+        from .. import frontmatter as _fm
+        rows = []
+        llm = os.path.join(root, ".llm")
+        for dp, _dn, fns in os.walk(llm):
+            for fn in fns:
+                if not fn.endswith(".md") or fn.startswith("session-"):
+                    continue
+                fp = os.path.join(dp, fn)
+                try:
+                    with open(fp, encoding="utf-8") as f:
+                        meta, _body = _fm.parse(f.read())
+                except Exception:
+                    continue
+                etype = (meta.get("type") or "").strip()
+                if not etype:  # not a knowledge entry (raw plan/note without frontmatter)
+                    continue
+                iv = (meta.get("invalid_at") or "").strip()
+                rows.append({
+                    "path": os.path.relpath(fp, root),
+                    "type": etype,
+                    "topic": meta.get("topic"),
+                    "scope": meta.get("scope"),
+                    "valid_at": meta.get("valid_at"),
+                    "invalid_at": iv or None,
+                    "active": iv in ("", "~", "null", "none"),
+                })
+        if type:
+            rows = [r for r in rows if r["type"] == type]
+        if q:
+            ql = q.lower()
+            rows = [r for r in rows
+                    if ql in (r.get("topic") or "").lower()
+                    or ql in r["path"].lower()]
+        rows.sort(key=lambda r: (not r["active"], r["type"], r.get("topic") or ""))
+        return rows
+
+    @app.get("/api/entry")
+    def api_entry(path: str):
+        fp = _safe_entry_path(path)
+        with open(fp, encoding="utf-8") as f:
+            return {"path": path, "content": f.read()}
+
+    @app.get("/api/guardrails")
+    def api_guardrails():
+        from ..cli import _BUILTIN_GUARDRAILS
+        builtin = [{"kind": k, "name": n, "desc": d}
+                   for k, n, d in _BUILTIN_GUARDRAILS]
+        rules = []
+        cfgp = os.path.join(root, ".llm", "guardrails.toml")
+        if os.path.exists(cfgp):
+            try:
+                import tomllib
+                with open(cfgp, "rb") as f:
+                    rules = tomllib.load(f).get("deny", [])
+            except Exception:
+                pass
+        conn = _store.connect(root)
+        crows = conn.execute(
+            "SELECT topic, scope, invalid_at FROM entries "
+            "WHERE type='constraint' ORDER BY topic").fetchall()
+        conn.close()
+        constraints = [{
+            "topic": r["topic"], "scope": r["scope"],
+            "active": r["invalid_at"] in (None, "", "~", "null", "none"),
+        } for r in crows]
+        return {"builtin": builtin, "rules": rules, "constraints": constraints}
+
+    @app.post("/api/retire")
+    def api_retire(req: RetireReq):
+        import datetime
+        import re as _re
+        fp = _safe_entry_path(req.path)
+        with open(fp, encoding="utf-8") as f:
+            txt = f.read()
+        today = datetime.date.today().isoformat()
+        if _re.search(r"(?m)^invalid_at:.*$", txt):
+            txt = _re.sub(r"(?m)^invalid_at:.*$", f"invalid_at: {today}", txt, count=1)
+        else:
+            txt = _re.sub(r"^(---\s*\n)", rf"\1invalid_at: {today}\n", txt, count=1)
+        with open(fp, "w", encoding="utf-8") as f:
+            f.write(txt)
+        _store.index(root)
+        _events.log(root, "human.retire", query=req.path)
+        return {"ok": True, "invalid_at": today}
+
+    @app.post("/api/update")
+    def api_update(req: UpdateReq):
+        from .. import frontmatter as _fm
+        meta, _body = _fm.parse(req.content)
+        if not meta.get("type"):
+            raise HTTPException(400, detail="Front-matter must include a 'type:' field.")
+        fp = _safe_entry_path(req.path)
+        with open(fp, "w", encoding="utf-8") as f:
+            f.write(req.content)
+        _store.index(root)
+        _events.log(root, "human.edit", query=req.path)
+        return {"ok": True}
+
+    @app.post("/api/propose")
+    def api_propose(req: ProposeReq):
+        try:
+            rel, approved = _propose_entry(
+                root, req.type, req.topic, req.scope, req.content)
+        except ValueError as e:
+            raise HTTPException(400, detail=str(e))
+        _events.log(root, "human.create", query=rel)
+        return {"ok": True, "path": rel, "approved": approved}
+
+    @app.post("/api/guardrail-rule")
+    def api_guardrail_rule(req: RuleReq):
+        if not req.pattern.strip():
+            raise HTTPException(400, detail="pattern is required")
+        try:
+            import re as _re
+            _re.compile(req.pattern)
+        except Exception as e:
+            raise HTTPException(400, detail=f"invalid regex: {e}")
+        tool = "path" if req.tool == "path" else "Bash"
+        pat = req.pattern.replace("\\", "\\\\").replace('"', '\\"')
+        msg = (req.message or "").replace("\\", "\\\\").replace('"', '\\"')
+        cfgp = os.path.join(root, ".llm", "guardrails.toml")
+        os.makedirs(os.path.dirname(cfgp), exist_ok=True)
+        with open(cfgp, "a", encoding="utf-8") as f:
+            f.write(f'\n[[deny]]\ntool = "{tool}"\npattern = "{pat}"\n'
+                    f'message = "{msg}"\n')
+        _events.log(root, "human.rule", query=f"{tool}:{req.pattern}")
+        return {"ok": True}
+
+    @app.get("/api/audit")
+    def api_audit(limit: int = 60):
+        conn = _store.connect(root)
+        rows = conn.execute(
+            "SELECT ts, tool, query FROM events WHERE tool LIKE 'human.%' "
+            "ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
     return app
 
@@ -1085,8 +1469,8 @@ function openDrawer(name) {
     <div class="drawer-section">
       <h4>Path</h4>
       <div class="drawer-path">${esc(s.root || '?')}</div>
-      <div class="drawer-cmd">cd ${esc(s.root || '?')} &amp;&amp; cruxhive ui</div>
-      <div class="kpi-sub" style="margin-top:.35rem">Opens this project's dedicated UI with Approvals · Usage · By AI Tool · Gaps tabs.</div>
+      <a href="/p/${encodeURIComponent(name)}/" style="display:inline-block;margin-top:.55rem;padding:.4rem .8rem;border:1px solid #3a2f14;border-radius:.35rem;color:#f5a524;text-decoration:none;font-size:.82rem">Open full project view →</a>
+      <div class="kpi-sub" style="margin-top:.4rem">Dashboard · Usage · By AI Tool · Gaps · Knowledge &amp; guardrails (Manage)</div>
     </div>`);
 
   // KPI summary
@@ -1185,4 +1569,30 @@ def make_workspace_app() -> "FastAPI":  # type: ignore[name-defined]
         agg = _ws.aggregate([s for s in snaps if not s.get("error")])
         return {"aggregate": agg, "projects": snaps}
 
+    return app
+
+
+def make_unified_app() -> "FastAPI":  # type: ignore[name-defined]
+    """Unified UI: workspace rollup at `/`, each project mounted at `/p/{name}/`.
+
+    Clicking a project in the rollup drills into its full per-project app
+    (dashboard + Manage) — one URL, one process, no port juggling. The
+    per-project templates use relative API paths so they work both standalone
+    (`make_app`) and mounted here.
+    """
+    if not _FASTAPI_AVAILABLE:
+        raise ImportError("fastapi not installed. Run: uv tool install 'cruxhive-mcp[ui]'")
+    from .. import workspace as _ws
+
+    app = make_workspace_app()
+    seen: set[str] = set()
+    for rootp in _ws.list_projects():
+        name = rootp.name
+        if name in seen:
+            continue
+        seen.add(name)
+        try:
+            app.mount(f"/p/{name}", make_app(str(rootp)))
+        except Exception:
+            pass
     return app
