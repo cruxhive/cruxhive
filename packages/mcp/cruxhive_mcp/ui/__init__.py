@@ -559,6 +559,8 @@ async function loadGaps() {
           <span class="gap-q">${x.query}</span>
           <span class="pill">${x.times}×</span>
           <span class="pill">${x.clients || '?'}</span>
+          <a href="/manage?new=${encodeURIComponent(x.query)}"
+             style="color:#f5a524;font-size:.72rem;margin-left:auto;text-decoration:none">document →</a>
         </div>`).join('')
     : '<div class="empty">No zero-result queries — AI is finding what it needs ✓</div>';
 
@@ -570,9 +572,21 @@ async function loadGaps() {
           ${badge(x.type)}
           <span class="path" style="flex:1">${x.path}</span>
           <span class="pill">${d}</span>
+          <button onclick="retireStale('${x.path}')"
+            style="background:transparent;border:1px solid #2a2a2a;color:#f87171;border-radius:.3rem;font-size:.72rem;padding:.2rem .5rem;cursor:pointer">retire</button>
         </div>`;
       }).join('')
     : '<div class="empty">No stale entries — knowledge base is fresh ✓</div>';
+}
+
+async function retireStale(p) {
+  if (!confirm('Retire ' + p + '?\\n(sets invalid_at; file kept, not deleted)')) return;
+  const r = await fetch('/api/retire', {
+    method: 'POST', headers: {'content-type': 'application/json'},
+    body: JSON.stringify({path: p})
+  });
+  if (r.ok) { toast('Retired ✓', true); loadGaps(); }
+  else { toast('Retire failed', false); }
 }
 
 async function approve(path) {
@@ -650,6 +664,7 @@ h3{margin:18px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.05e
  <div class=tab data-t=search onclick=tab('search')>Search</div>
  <div class=tab data-t=guard onclick=tab('guard')>Guardrails</div>
  <div class=tab data-t=browse onclick=tab('browse')>Browse &amp; manage</div>
+ <div class=tab data-t=activity onclick=tab('activity')>Activity</div>
 </div>
 <div class=wrap>
  <div id=search style=display:none>
@@ -669,6 +684,7 @@ h3{margin:18px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.05e
    </div>
    <div id=entries></div>
  </div>
+ <div id=activity style=display:none></div>
 </div>
 <div class=modal id=modal><div class=box>
   <header><strong id=mtitle></strong><button class=btn onclick="cls('modal')">✕</button></header>
@@ -701,7 +717,7 @@ h3{margin:18px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.05e
 <script>
 const $=s=>document.querySelector(s);let cur='search';
 function openM(id){$('#'+id).classList.add('on')}function cls(id){$('#'+id).classList.remove('on')}
-function tab(t){cur=t;['search','guard','browse'].forEach(x=>{$('#'+x).style.display=x==t?'block':'none';document.querySelector('.tab[data-t='+x+']').classList.toggle('on',x==t)});if(t=='guard')loadGuard();if(t=='browse')loadEntries()}
+function tab(t){cur=t;['search','guard','browse','activity'].forEach(x=>{$('#'+x).style.display=x==t?'block':'none';document.querySelector('.tab[data-t='+x+']').classList.toggle('on',x==t)});if(t=='guard')loadGuard();if(t=='browse')loadEntries();if(t=='activity')loadAudit()}
 function bdg(t){return `<span class="badge b-${t||'note'}">${t||'note'}</span>`}
 function esc(s){return (s||'').replace(/[<>]/g,'')}
 function toast(m){const e=$('#toast');e.textContent=m;e.classList.add('on');setTimeout(()=>e.classList.remove('on'),2000)}
@@ -728,7 +744,11 @@ async function rejectP(p){if(!confirm('Reject and delete this pending proposal?'
 function newEntry(preset){if(preset)$('#etype').value=preset;openM('emodal')}
 async function submitEntry(){const b={type:$('#etype').value,topic:$('#etopic').value,scope:$('#escope').value,content:$('#econtent').value};const r=await fetch('/api/propose',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)});if(r.ok){const d=await r.json();toast(d.approved?'Created & approved':'Proposed for review');cls('emodal');$('#etopic').value='';$('#econtent').value='';reloadCur()}else{const e=await r.json().catch(()=>({}));toast('Failed: '+(e.detail||r.status))}}
 async function submitRule(){const b={tool:$('#rtool').value,pattern:$('#rpattern').value,message:$('#rmessage').value};const r=await fetch('/api/guardrail-rule',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)});if(r.ok){toast('Rule added');cls('rmodal');$('#rpattern').value='';$('#rmessage').value='';loadGuard()}else{const e=await r.json().catch(()=>({}));toast('Failed: '+(e.detail||r.status))}}
-tab('search');
+const ALBL={'human.create':'created','human.approve':'approved','human.reject':'rejected','human.retire':'retired','human.edit':'edited','human.rule':'added rule'};
+async function loadAudit(){const d=await (await fetch('/api/audit')).json();
+ $('#activity').innerHTML='<h3>Human actions (most recent)</h3>'+(d.length?d.map(e=>`<div class=card><span class=meta>${(e.ts||'').replace('T',' ').slice(0,16)}</span> &nbsp;<strong>${ALBL[e.tool]||e.tool}</strong> &nbsp;<span class=meta>${esc(e.query)}</span></div>`).join(''):'<div class=meta>No human actions logged yet — approvals, edits, retires and creations show here.</div>')}
+const _np=new URLSearchParams(location.search).get('new');
+if(_np){tab('browse');setTimeout(()=>{$('#etopic').value=_np;openM('emodal')},60)}else{tab('search')}
 </script></body></html>"""
 
 
@@ -771,6 +791,7 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
         conn.close()
         if not ok:
             raise HTTPException(404, detail="entry not found")
+        _events.log(root, "human.approve", query=req.path)
         return {"ok": True}
 
     @app.post("/api/reject")
@@ -780,6 +801,7 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
         conn.close()
         if not ok:
             raise HTTPException(404, detail="entry not found")
+        _events.log(root, "human.reject", query=req.path)
         return {"ok": True}
 
     @app.get("/api/kpis")
@@ -949,6 +971,7 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
         with open(fp, "w", encoding="utf-8") as f:
             f.write(txt)
         _store.index(root)
+        _events.log(root, "human.retire", query=req.path)
         return {"ok": True, "invalid_at": today}
 
     @app.post("/api/update")
@@ -961,6 +984,7 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
         with open(fp, "w", encoding="utf-8") as f:
             f.write(req.content)
         _store.index(root)
+        _events.log(root, "human.edit", query=req.path)
         return {"ok": True}
 
     @app.post("/api/propose")
@@ -970,6 +994,7 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
                 root, req.type, req.topic, req.scope, req.content)
         except ValueError as e:
             raise HTTPException(400, detail=str(e))
+        _events.log(root, "human.create", query=rel)
         return {"ok": True, "path": rel, "approved": approved}
 
     @app.post("/api/guardrail-rule")
@@ -989,7 +1014,17 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
         with open(cfgp, "a", encoding="utf-8") as f:
             f.write(f'\n[[deny]]\ntool = "{tool}"\npattern = "{pat}"\n'
                     f'message = "{msg}"\n')
+        _events.log(root, "human.rule", query=f"{tool}:{req.pattern}")
         return {"ok": True}
+
+    @app.get("/api/audit")
+    def api_audit(limit: int = 60):
+        conn = _store.connect(root)
+        rows = conn.execute(
+            "SELECT ts, tool, query FROM events WHERE tool LIKE 'human.%' "
+            "ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
     return app
 
