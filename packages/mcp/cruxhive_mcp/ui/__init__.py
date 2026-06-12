@@ -204,6 +204,9 @@ _HTML = """<!doctype html>
     <h1>crux<span>hive</span></h1>
   </a>
   <div class="stats" id="stats"></div>
+  <a href="/manage" title="Search, browse & manage knowledge + guardrails"
+     style="color:#f5a524;font-size:.78rem;text-decoration:none;
+            padding:.35rem .7rem;border:1px solid #3a2f14;border-radius:.3rem;margin-right:.4rem">🛡 Manage</a>
   <a href="/docs" target="_blank" rel="noopener" title="Open the CruxHive guide in a new tab"
      style="color:#94a3b8;font-size:.78rem;text-decoration:none;
             padding:.35rem .7rem;border:1px solid #2a2a2a;border-radius:.3rem">Docs ↗</a>
@@ -769,24 +772,42 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
 
     @app.get("/api/entries")
     def api_entries(type: str = "", q: str = ""):
-        conn = _store.connect(root)
-        sql = ("SELECT path, type, topic, scope, confidence, approved_by, "
-               "valid_at, invalid_at FROM entries WHERE 1=1")
-        params: list = []
+        # List from disk (not the index) so RETIRED entries remain visible/manageable —
+        # the indexer drops invalidated entries from the entries table.
+        from .. import frontmatter as _fm
+        rows = []
+        llm = os.path.join(root, ".llm")
+        for dp, _dn, fns in os.walk(llm):
+            for fn in fns:
+                if not fn.endswith(".md") or fn.startswith("session-"):
+                    continue
+                fp = os.path.join(dp, fn)
+                try:
+                    with open(fp, encoding="utf-8") as f:
+                        meta, _body = _fm.parse(f.read())
+                except Exception:
+                    continue
+                etype = (meta.get("type") or "").strip()
+                if not etype:  # not a knowledge entry (raw plan/note without frontmatter)
+                    continue
+                iv = (meta.get("invalid_at") or "").strip()
+                rows.append({
+                    "path": os.path.relpath(fp, root),
+                    "type": etype,
+                    "topic": meta.get("topic"),
+                    "scope": meta.get("scope"),
+                    "valid_at": meta.get("valid_at"),
+                    "invalid_at": iv or None,
+                    "active": iv in ("", "~", "null", "none"),
+                })
         if type:
-            sql += " AND type = ?"
-            params.append(type)
-        sql += " ORDER BY type, topic"
-        rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
-        conn.close()
+            rows = [r for r in rows if r["type"] == type]
         if q:
             ql = q.lower()
             rows = [r for r in rows
                     if ql in (r.get("topic") or "").lower()
-                    or ql in (r.get("path") or "").lower()]
-        for r in rows:
-            iv = r.get("invalid_at")
-            r["active"] = iv in (None, "", "~", "null", "none")
+                    or ql in r["path"].lower()]
+        rows.sort(key=lambda r: (not r["active"], r["type"], r.get("topic") or ""))
         return rows
 
     @app.get("/api/entry")
