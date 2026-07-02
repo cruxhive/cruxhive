@@ -81,13 +81,17 @@ def test_full_propose_approve_search_flow(fresh_project):
     assert len(pending) == 1
     proposed_path = pending[0]
 
-    # 4. Search for the new content — should be findable even in pending.
+    # 4. Search for the new content — must NOT be findable while still pending.
+    # The approval gate governs retrieval, not just disk state: an unapproved
+    # (source: ai-proposed) entry must never surface in search, or an AI could
+    # propose knowledge and have it injected as context before any human review.
     # FTS5 doesn't tokenize hyphens, so use a word from the body.
     r = _run(["cruxhive-search", "external"], fresh_project)
     assert r.returncode == 0
     hits = json.loads(r.stdout)
     paths = [h.get("path", "") for h in hits]
-    assert any("rate-limit" in p for p in paths), f"Expected rate-limit in {paths}"
+    assert not any("rate-limit" in p for p in paths), \
+        f"Unapproved proposal leaked into search: {paths}"
 
     # 5. List pending — should include the new entry
     r = _run(["cruxhive-review"], fresh_project)
@@ -105,6 +109,14 @@ def test_full_propose_approve_search_flow(fresh_project):
     body = proposed_path.read_text()
     assert "source: human" in body
     assert "approved_by: alice" in body
+
+    # 7b. Now that it's approved, the same entry IS retrievable (approve flips
+    # source in place; the file stays in .llm/pending/).
+    r = _run(["cruxhive-search", "external"], fresh_project)
+    assert r.returncode == 0
+    paths = [h.get("path", "") for h in json.loads(r.stdout)]
+    assert any("rate-limit" in p for p in paths), \
+        f"Approved entry not retrievable: {paths}"
 
     # 8. Pending list should now be empty (no other proposals)
     r = _run(["cruxhive-review"], fresh_project)

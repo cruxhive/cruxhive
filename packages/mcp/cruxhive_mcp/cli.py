@@ -43,6 +43,20 @@ def ui() -> None:
             print(ui.__doc__)
             return
 
+    # Binding off-loopback exposes an unauthenticated, state-changing API. Warn
+    # loudly and add the bind host to the Host-header allowlist so it's reachable
+    # (loopback stays allowed regardless).
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        existing = os.environ.get("CRUXHIVE_ALLOWED_HOSTS", "")
+        os.environ["CRUXHIVE_ALLOWED_HOSTS"] = f"{existing},{host}".strip(",")
+        print(
+            f"  \033[33m⚠\033[0m  Binding to {host} — the CruxHive UI has NO "
+            "authentication and can approve/retire knowledge and add guardrail "
+            "rules.\n     Anyone who can reach this address controls the "
+            "knowledge base. Use only on a trusted network.",
+            file=sys.stderr,
+        )
+
     from .ui import make_app, make_unified_app  # type: ignore[attr-defined]
 
     app = make_unified_app() if workspace else make_app()

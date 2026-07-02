@@ -51,6 +51,30 @@ if _FASTAPI_AVAILABLE:
         message: str = ""
 
 
+def _allowed_hosts() -> list[str]:
+    """Host-header allowlist for the dashboard.
+
+    The UI is unauthenticated and every mutating endpoint (approve/reject/retire/
+    update/propose/guardrail-rule) trusts the caller. Even bound to 127.0.0.1 that
+    leaves it open to DNS-rebinding: a site the developer visits can point its own
+    hostname at 127.0.0.1 and drive this API. A Host-header allowlist closes that
+    — the rebound request carries the attacker's hostname, which won't match.
+    Extend via CRUXHIVE_ALLOWED_HOSTS (comma-separated) when intentionally binding
+    to a non-loopback address for remote access.
+    """
+    hosts = ["localhost", "127.0.0.1", "::1", "testserver"]
+    extra = os.environ.get("CRUXHIVE_ALLOWED_HOSTS", "")
+    hosts += [h.strip() for h in extra.split(",") if h.strip()]
+    return hosts
+
+
+def _harden(app: "FastAPI") -> "FastAPI":  # type: ignore[name-defined]
+    """Apply the Host-header allowlist to an app (idempotent per app)."""
+    from starlette.middleware.trustedhost import TrustedHostMiddleware
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=_allowed_hosts())
+    return app
+
+
 _VALID_TYPES = {"fact", "decision", "plan", "pattern", "constraint", "research", "outcome"}
 
 
@@ -354,6 +378,11 @@ _HTML = """<!doctype html>
 <div class="toast" id="toast"></div>
 <script>
 const ROOT = '';
+// Escape untrusted strings before innerHTML. Proposal previews/topics and logged
+// search queries are AI-authored, so they must never be interpolated raw — this
+// dashboard also performs privileged actions (approve/reject/retire).
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let approver = localStorage.getItem('cruxhive-approver') || '';
 
 document.getElementById('approver-input').value = approver;
@@ -377,7 +406,7 @@ document.querySelectorAll('nav.tabs button').forEach(b => {
 function badge(type) {
   const cls = ['fact','constraint','decision','pattern','plan','research','outcome']
     .includes(type) ? type : 'other';
-  return `<span class="badge badge-${cls}">${type||'?'}</span>`;
+  return `<span class="badge badge-${cls}">${esc(type)||'?'}</span>`;
 }
 
 function toast(msg, ok=true) {
@@ -467,7 +496,7 @@ async function loadApprovals() {
       ? `<div class="conflict-box">
            <div class="conflict-title">⚠ ${p.conflicts.length} potential conflict(s) with approved constraint(s)</div>
            ${p.conflicts.slice(0,3).map(c =>
-             `<div class="conflict-item">· [${c.severity}] ${c.path} (score: ${c.score}) — ${c.preview || ''}</div>`
+             `<div class="conflict-item">· [${esc(c.severity)}] ${esc(c.path)} (score: ${esc(c.score)}) — ${esc(c.preview)}</div>`
            ).join('')}
          </div>`
       : '';
@@ -475,10 +504,10 @@ async function loadApprovals() {
     <div class="card" id="card-${btoa(p.path)}">
       <div class="card-header">
         ${badge(p.type)}
-        <span class="path">${p.path}</span>
+        <span class="path">${esc(p.path)}</span>
       </div>
-      <div class="meta">${p.topic ? `topic: ${p.topic} · ` : ''}proposed: ${p.valid_at||'?'}</div>
-      <div class="preview">${p.preview || ''}</div>
+      <div class="meta">${p.topic ? `topic: ${esc(p.topic)} · ` : ''}proposed: ${esc(p.valid_at)||'?'}</div>
+      <div class="preview">${esc(p.preview)}</div>
       ${conflictsHtml}
       <div class="actions">
         <button class="btn-approve" onclick="approve('${p.path}')">✓ Approve</button>
@@ -536,7 +565,7 @@ async function loadModels() {
   tb.innerHTML = rows.map(r => {
     const pct = r.searches ? (r.hits / r.searches * 100).toFixed(0) + '%' : '—';
     return `<tr>
-      <td>${r.client || 'unknown'}</td>
+      <td>${esc(r.client) || 'unknown'}</td>
       <td class="num">${r.calls}</td>
       <td class="num">${r.searches}</td>
       <td class="num">${pct}</td>
@@ -556,9 +585,9 @@ async function loadGaps() {
   gl.innerHTML = g.length
     ? g.map(x => `
         <div class="gap-row">
-          <span class="gap-q">${x.query}</span>
+          <span class="gap-q">${esc(x.query)}</span>
           <span class="pill">${x.times}×</span>
-          <span class="pill">${x.clients || '?'}</span>
+          <span class="pill">${esc(x.clients) || '?'}</span>
           <a href="manage?new=${encodeURIComponent(x.query)}"
              style="color:#f5a524;font-size:.72rem;margin-left:auto;text-decoration:none">document →</a>
         </div>`).join('')
@@ -570,7 +599,7 @@ async function loadGaps() {
         const d = new Date(x.mtime * 1000).toISOString().slice(0,10);
         return `<div class="gap-row">
           ${badge(x.type)}
-          <span class="path" style="flex:1">${x.path}</span>
+          <span class="path" style="flex:1">${esc(x.path)}</span>
           <span class="pill">${d}</span>
           <button onclick="retireStale('${x.path}')"
             style="background:transparent;border:1px solid #2a2a2a;color:#f87171;border-radius:.3rem;font-size:.72rem;padding:.2rem .5rem;cursor:pointer">retire</button>
@@ -759,7 +788,7 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
         )
 
     root = project_root or os.getcwd()
-    app = FastAPI(title="CruxHive", docs_url=None, redoc_url=None)
+    app = _harden(FastAPI(title="CruxHive", docs_url=None, redoc_url=None))
 
     @app.get("/", response_class=HTMLResponse)
     def index():
@@ -1553,7 +1582,7 @@ def make_workspace_app() -> "FastAPI":  # type: ignore[name-defined]
 
     from .. import workspace as _ws
 
-    app = FastAPI(title="CruxHive Workspace", docs_url=None, redoc_url=None)
+    app = _harden(FastAPI(title="CruxHive Workspace", docs_url=None, redoc_url=None))
 
     @app.get("/", response_class=HTMLResponse)
     def index():
