@@ -57,6 +57,16 @@ def connect(root: str) -> sqlite3.Connection:
     p.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(p))
     conn.row_factory = sqlite3.Row
+    # Concurrency: several entry points open their own connection and some write
+    # (propose→index, approve/reject, ephemeral stamping). Without these a writer
+    # racing a reader/indexer fails instantly with "database is locked". WAL lets
+    # readers and a writer coexist; busy_timeout makes contenders wait, not fail.
+    # Wrapped in try: PRAGMAs must never brick the store (e.g. read-only FS).
+    try:
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA journal_mode=WAL")
+    except sqlite3.Error:
+        pass
     _try_load_vec(conn)
     _init_schema(conn)
     _migrate(conn)

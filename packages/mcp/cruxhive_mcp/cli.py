@@ -1137,6 +1137,108 @@ _BUILTIN_GUARDRAILS = [
 ]
 
 
+import re as _re
+
+# ── Built-in guardrail rules (compiled once) ──────────────────────────────────
+# secrets-hygiene: `targ` is matched against the command with its commit MESSAGE
+#   stripped (see _strip_commit_message) so `git commit -m "note re .env"` isn't
+#   blocked while `git add .env` still is.
+# no-force-push-main: the ref matcher anchors main/master as a whole push refspec
+#   (or `HEAD:main` / `refs/heads/main`) so `feature/main-rewrite` isn't blocked.
+_SECRET_FILE_RX = _re.compile(
+    r"\.env(\.|\b)|id_rsa|\.pem\b|\.key\b|credentials|\.npmrc|"
+    r"\.pypirc|secrets?\.(ya?ml|json|toml)", _re.I)
+_MAIN_REF_RX = _re.compile(
+    r"(?:^|\s)(?:\S*?:)?(?:refs/heads/)?(?:main|master)(?=\s|$)", _re.I)
+
+_BASH_DENY = [
+    ("secrets-hygiene",
+     _re.compile(r"\bgit\s+(add|commit)\b", _re.I),
+     _SECRET_FILE_RX,
+     "Guardrail [secrets-hygiene]: refusing to git add/commit a secret file "
+     "(.env / key / credentials). Keep secrets out of the repo; add to .gitignore."),
+    ("no-force-push-main",
+     _re.compile(r"\bgit\s+push\b.*(--force\b|--force-with-lease\b|-f\b)", _re.I),
+     _MAIN_REF_RX,
+     "Guardrail [no-force-push-main]: force-push to main/master is blocked. "
+     "Rewrite history on a feature branch."),
+]
+_PATH_DENY = [
+    ("migration-immutable",
+     _re.compile(r"(migrations|alembic)/versions/.+\.py$", _re.I),
+     "Guardrail [migration-immutable]: this migration is committed and treated as "
+     "immutable. Add a new revision (expand-contract) instead of editing in place."),
+]
+_BASH_WARN = [
+    (_re.compile(r"deploy_prod\.sh", _re.I),
+     "Guardrail [deploy-safety]: targets PRODUCTION directly — confirm it was "
+     "tested on staging first."),
+]
+
+# Strip a git commit message value so words inside it don't trip file guardrails.
+# Handles -m/-am/-F-less quoted and unquoted forms and --message. Only the value
+# is removed; requiring a separator before unquoted values avoids eating --amend.
+_MSG_STRIP_RX = [
+    _re.compile(r"-[a-z]*m\s*=?\s*\"[^\"]*\"", _re.I),
+    _re.compile(r"-[a-z]*m\s*=?\s*'[^']*'", _re.I),
+    _re.compile(r"--message\s*=?\s*\"[^\"]*\"", _re.I),
+    _re.compile(r"--message\s*=?\s*'[^']*'", _re.I),
+    _re.compile(r"-[a-z]*m(?:\s+|=)\S+", _re.I),
+    _re.compile(r"--message(?:\s+|=)\S+", _re.I),
+]
+
+
+def _strip_commit_message(cmd: str) -> str:
+    out = cmd
+    for rx in _MSG_STRIP_RX:
+        out = rx.sub(" ", out)
+    return out
+
+
+def _git_tracked(path: str, cwd: str) -> bool:
+    """True if `path` is tracked by git (committed at least once). A brand-new
+    migration you're still authoring is untracked → editable; a committed one is
+    protected. git missing / timeout / error → False (fail open, don't block)."""
+    import subprocess
+    try:
+        r = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "--", path],
+            cwd=cwd, capture_output=True, timeout=3,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def _guardrail_bash(cmd: str, extra_bash=()) -> tuple[str | None, str | None]:
+    """Evaluate a Bash command. Returns (block_msg, warn_msg); pure/testable."""
+    stripped = _strip_commit_message(cmd)
+    for label, trig, targ, msg in _BASH_DENY:
+        target = stripped if label == "secrets-hygiene" else cmd
+        if trig.search(cmd) and targ.search(target):
+            return msg, None
+    for trig, targ, msg in extra_bash:
+        if trig.search(cmd) and targ.search(cmd):
+            return msg, None
+    for rx, msg in _BASH_WARN:
+        if rx.search(cmd):
+            return None, msg
+    return None, None
+
+
+def _guardrail_path(fp: str, tracked: bool, extra_path=()) -> str | None:
+    """Evaluate an Edit/Write path. `tracked` = is fp git-tracked. Pure/testable."""
+    for label, rx, msg in _PATH_DENY:
+        if rx.search(fp):
+            if label == "migration-immutable" and not tracked:
+                continue  # new/untracked migration being authored — allow
+            return msg
+    for rx, msg in extra_path:
+        if rx.search(fp):
+            return msg
+    return None
+
+
 def _guardrails_list() -> None:
     """Render every active guardrail for the current project (cruxhive-guardrails --list)."""
     G, Y, D, R, B = "\033[32m", "\033[33m", "\033[2m", "\033[0m", "\033[1m"
@@ -1213,32 +1315,6 @@ def guardrails() -> None:
         return
 
     import json
-    import re as _re
-
-    bash_deny = [
-        ("secrets-hygiene",
-         _re.compile(r"\bgit\s+(add|commit)\b", _re.I),
-         _re.compile(r"\.env(\.|\b)|id_rsa|\.pem\b|\.key\b|credentials|\.npmrc|"
-                     r"\.pypirc|secrets?\.(ya?ml|json|toml)", _re.I),
-         "Guardrail [secrets-hygiene]: refusing to git add/commit a secret file "
-         "(.env / key / credentials). Keep secrets out of the repo; add to .gitignore."),
-        ("no-force-push-main",
-         _re.compile(r"\bgit\s+push\b.*(--force\b|-f\b)", _re.I),
-         _re.compile(r"\b(main|master)\b", _re.I),
-         "Guardrail [no-force-push-main]: force-push to main/master is blocked. "
-         "Rewrite history on a feature branch."),
-    ]
-    path_deny = [
-        ("migration-immutable",
-         _re.compile(r"(migrations|alembic)/versions/.+\.py$", _re.I),
-         "Guardrail [migration-immutable]: merged migration files are immutable. "
-         "Add a new revision (expand-contract) instead of editing in place."),
-    ]
-    bash_warn = [
-        (_re.compile(r"deploy_prod\.sh", _re.I),
-         "Guardrail [deploy-safety]: targets PRODUCTION directly — confirm it was "
-         "tested on staging first."),
-    ]
 
     block_msg = None
     try:
@@ -1268,31 +1344,13 @@ def guardrails() -> None:
 
         if tool == "Bash":
             cmd = ti.get("command") or ""
-            for _l, trig, targ, msg in bash_deny:
-                if trig.search(cmd) and targ.search(cmd):
-                    block_msg = msg
-                    break
-            if block_msg is None:
-                for trig, targ, msg in extra_bash:
-                    if trig.search(cmd) and targ.search(cmd):
-                        block_msg = msg
-                        break
-            if block_msg is None:
-                for rx, msg in bash_warn:
-                    if rx.search(cmd):
-                        sys.stderr.write(msg + "\n")  # visible, non-blocking
-                        break
+            block_msg, warn_msg = _guardrail_bash(cmd, extra_bash)
+            if block_msg is None and warn_msg:
+                sys.stderr.write(warn_msg + "\n")  # visible, non-blocking
         elif tool in ("Edit", "Write", "NotebookEdit"):
             fp = ti.get("file_path") or ti.get("notebook_path") or ""
-            for _l, rx, msg in path_deny:
-                if rx.search(fp):
-                    block_msg = msg
-                    break
-            if block_msg is None:
-                for rx, msg in extra_path:
-                    if rx.search(fp):
-                        block_msg = msg
-                        break
+            tracked = _git_tracked(fp, cwd) if fp else False
+            block_msg = _guardrail_path(fp, tracked, extra_path)
     except Exception:
         block_msg = None  # fail open
 

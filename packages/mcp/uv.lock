@@ -156,6 +156,7 @@ all = [
     { name = "pydantic" },
     { name = "sentence-transformers" },
     { name = "sqlite-vec" },
+    { name = "starlette" },
     { name = "uvicorn" },
 ]
 dev = [
@@ -168,6 +169,7 @@ full = [
 ui = [
     { name = "fastapi" },
     { name = "pydantic" },
+    { name = "starlette" },
     { name = "uvicorn" },
 ]
 
@@ -175,12 +177,13 @@ ui = [
 requires-dist = [
     { name = "cruxhive-mcp", extras = ["full"], marker = "extra == 'all'" },
     { name = "cruxhive-mcp", extras = ["ui"], marker = "extra == 'all'" },
-    { name = "fastapi", marker = "extra == 'ui'", specifier = ">=0.100.0" },
+    { name = "fastapi", marker = "extra == 'ui'", specifier = ">=0.136.0" },
     { name = "mcp", specifier = ">=1.0.0" },
     { name = "pydantic", marker = "extra == 'ui'", specifier = ">=2.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "sentence-transformers", marker = "extra == 'full'", specifier = ">=2.7.0" },
     { name = "sqlite-vec", marker = "extra == 'full'", specifier = ">=0.1.6" },
+    { name = "starlette", marker = "extra == 'ui'", specifier = ">=1.3.1" },
     { name = "uvicorn", marker = "extra == 'ui'", specifier = ">=0.20.0" },
 ]
 provides-extras = ["full", "ui", "dev", "all"]
