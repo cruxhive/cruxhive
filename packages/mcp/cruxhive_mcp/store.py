@@ -560,14 +560,25 @@ def rrf_fuse(
 def list_pending(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute("""
         SELECT path, type, scope, topic, confidence, source,
-               approved_by, valid_at,
-               substr(content, 1, 300) AS preview
+               approved_by, valid_at, content
         FROM entries
         WHERE source = 'ai-proposed'
           AND (approved_by IS NULL OR approved_by IN ('~','null','none',''))
         ORDER BY valid_at DESC
     """).fetchall()
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        d = dict(r)
+        # Preview from the body (not raw frontmatter), plus the reconcile
+        # verdict stamped at propose time so reviewers see "updates X" /
+        # "duplicate of Y" instead of an undifferentiated pile.
+        meta, body = _parse_fm(d.pop("content") or "")
+        d["preview"] = body.strip()[:300]
+        d["reconcile"] = meta.get("reconcile")
+        d["reconcile_target"] = meta.get("reconcile_target")
+        d["reconcile_score"] = meta.get("reconcile_score")
+        out.append(d)
+    return out
 
 
 def list_approved_constraints(conn: sqlite3.Connection) -> list[dict]:

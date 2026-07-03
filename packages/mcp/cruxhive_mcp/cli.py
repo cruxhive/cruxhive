@@ -146,12 +146,27 @@ def propose() -> None:
     else:
         source_val, approved_by = "ai-proposed", "~"
 
+    # Reconcile against existing knowledge + queue; stamp verdict for the reviewer.
+    reconcile_fm, vmsg = "", None
+    try:
+        from . import reconcile as _reconcile
+        conn = _store.connect(root)
+        verdict = _reconcile.reconcile(conn, topic, entry_type, content)
+        conn.close()
+        reconcile_fm = _reconcile.frontmatter_lines(verdict)
+        vmsg = _reconcile.verdict_message(verdict)
+    except Exception:
+        pass  # advisory only
+
     fpath.write_text(
         f"---\ntype: {entry_type}\nscope: {scope}\ntopic: {topic}\n"
         f"valid_at: {date}\ninvalid_at: ~\nconfidence: medium\n"
-        f"source: {source_val}\napproved_by: {approved_by}\n---\n\n{content}\n",
+        f"source: {source_val}\napproved_by: {approved_by}\n"
+        f"{reconcile_fm}---\n\n{content}\n",
         encoding="utf-8",
     )
+    if vmsg:
+        print(f"  \033[33m⚠\033[0m  {vmsg}", file=sys.stderr)
     try:
         _store.index(root)
     except Exception:

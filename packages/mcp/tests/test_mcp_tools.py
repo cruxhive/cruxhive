@@ -131,6 +131,42 @@ def test_context_propose_writes_pending_file(tools, project, monkeypatch):
     assert "approved_by: ~" in content
 
 
+def test_context_propose_stamps_reconcile_verdict_on_second_propose(
+    tools, project, monkeypatch
+):
+    """Proposing the same knowledge twice: the second proposal gets a
+    duplicate/update verdict stamped in its frontmatter and flagged in the
+    tool's response — the reviewer sees a reconciled queue, not a pile."""
+    monkeypatch.delenv("CRUXHIVE_SOLO", raising=False)
+    monkeypatch.delenv("CRUXHIVE_APPROVER", raising=False)
+    fake_home = project / "_home"
+    fake_home.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    body = "Celery beat fires the wallet engine scan every 300 seconds via redis."
+    first = tools["context_propose"](
+        type="fact", topic="wallet-scan", content=body, project_root=str(project),
+    )
+    assert "DUPLICATE" not in first
+    second = tools["context_propose"](
+        type="fact", topic="wallet-scan", content=body, project_root=str(project),
+    )
+    assert "DUPLICATE" in second or "UPDATES" in second
+
+    files = sorted((project / ".llm" / "pending").glob("fact_wallet-scan*.md"))
+    assert len(files) == 2
+    stamped = files[1].read_text()  # the _1 suffix — the second proposal
+    assert "reconcile: " in stamped
+    assert "reconcile_target: .llm/pending/fact_wallet-scan.md" in stamped
+
+    # And the verdict reaches the review surface.
+    conn = _store.connect(str(project))
+    pend = _store.list_pending(conn)
+    conn.close()
+    verdicts = {p["path"]: p["reconcile"] for p in pend}
+    assert verdicts[".llm/pending/fact_wallet-scan_1.md"] in ("duplicate", "update")
+
+
 def test_context_propose_solo_mode_auto_approves(tools, project, monkeypatch):
     monkeypatch.setenv("CRUXHIVE_SOLO", "1")
     monkeypatch.setenv("CRUXHIVE_APPROVER", "tester")

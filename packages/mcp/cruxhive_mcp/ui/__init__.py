@@ -109,10 +109,23 @@ def _propose_entry(root: str, etype: str, topic: str, scope: str, content: str):
     solo_enabled, solo_approver = _ws.is_solo()
     source_val = "human" if solo_enabled else "ai-proposed"
     approved_by = solo_approver if solo_enabled else "~"
+
+    # Reconcile against existing knowledge + queue; stamp verdict for the reviewer.
+    reconcile_fm = ""
+    try:
+        from .. import reconcile as _reconcile
+        conn = _store.connect(root)
+        verdict = _reconcile.reconcile(conn, topic, etype, content)
+        conn.close()
+        reconcile_fm = _reconcile.frontmatter_lines(verdict)
+    except Exception:
+        pass  # advisory only
+
     fpath.write_text(
         f"---\ntype: {etype}\nscope: {scope or 'project'}\ntopic: {topic}\n"
         f"valid_at: {date}\ninvalid_at: ~\nconfidence: medium\n"
-        f"source: {source_val}\napproved_by: {approved_by}\n---\n\n{content}\n",
+        f"source: {source_val}\napproved_by: {approved_by}\n"
+        f"{reconcile_fm}---\n\n{content}\n",
         encoding="utf-8",
     )
     try:
@@ -500,11 +513,17 @@ async function loadApprovals() {
            ).join('')}
          </div>`
       : '';
+    const reconcileHtml = p.reconcile
+      ? `<span class="pill" style="color:${p.reconcile==='duplicate'?'#f87171':'#f5a524'};border:1px solid ${p.reconcile==='duplicate'?'#f8717155':'#f5a52455'}">
+           ${p.reconcile==='duplicate'?'⧉ duplicate of':'↻ updates'} ${esc(p.reconcile_target)}${p.reconcile_score?` (${esc(p.reconcile_score)})`:''}
+         </span>`
+      : '';
     return `
     <div class="card" id="card-${btoa(p.path)}">
       <div class="card-header">
         ${badge(p.type)}
         <span class="path">${esc(p.path)}</span>
+        ${reconcileHtml}
       </div>
       <div class="meta">${p.topic ? `topic: ${esc(p.topic)} · ` : ''}proposed: ${esc(p.valid_at)||'?'}</div>
       <div class="preview">${esc(p.preview)}</div>
@@ -762,7 +781,7 @@ async function loadGuard(){const d=await (await fetch('api/guardrails')).json();
 async function loadEntries(){const t=$('#ftype').value,q=$('#fq').value;
  const [pend,ent]=await Promise.all([fetch('api/pending').then(r=>r.json()).catch(()=>[]),fetch('api/entries?type='+t+'&q='+encodeURIComponent(q)).then(r=>r.json())]);
  let h='';
- if(pend.length){h+='<h3>Pending review ('+pend.length+')</h3>'+pend.map(p=>`<div class=card>${bdg(p.type)} <strong>${esc(p.topic)}</strong> <span class=meta>${p.path}</span>${(p.conflicts&&p.conflicts.length)?` <span class="pill off">⚠ ${p.conflicts.length} conflict</span>`:''}<div class=acts><button class=btn onclick="view('${p.path}')">view</button><button class=btn onclick="approve('${p.path}')">approve</button><button class="btn danger" onclick="rejectP('${p.path}')">reject</button></div></div>`).join('')}
+ if(pend.length){h+='<h3>Pending review ('+pend.length+')</h3>'+pend.map(p=>`<div class=card>${bdg(p.type)} <strong>${esc(p.topic)}</strong> <span class=meta>${p.path}</span>${p.reconcile?` <span class="pill off">${p.reconcile==='duplicate'?'⧉ dup of':'↻ updates'} ${esc(p.reconcile_target)}</span>`:''}${(p.conflicts&&p.conflicts.length)?` <span class="pill off">⚠ ${p.conflicts.length} conflict</span>`:''}<div class=acts><button class=btn onclick="view('${p.path}')">view</button><button class=btn onclick="approve('${p.path}')">approve</button><button class="btn danger" onclick="rejectP('${p.path}')">reject</button></div></div>`).join('')}
  h+='<h3>Knowledge entries</h3>'+(ent.length?ent.map(e=>`<div class=card>${bdg(e.type)} <strong>${esc(e.topic)||'(no topic)'}</strong> <span class=meta>${e.scope||''} · ${e.path}</span> <span class="pill ${e.active?'on':'off'}">${e.active?'active':'retired'}</span><div class=acts><button class=btn onclick="view('${e.path}')">view / edit</button>${e.active?`<button class="btn danger" onclick="retire('${e.path}')">retire</button>`:''}</div></div>`).join(''):'<div class=meta>No entries.</div>');
  $('#entries').innerHTML=h}
 async function view(p){const d=await (await fetch('api/entry?path='+encodeURIComponent(p))).json();$('#mtitle').textContent=p.split('/').pop();$('#mpath').textContent=p;$('#mcontent').value=d.content;$('#mcontent').dataset.path=p;openM('modal')}
