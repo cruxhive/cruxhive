@@ -54,6 +54,10 @@ async function review(_args) {
     const preview = (p.preview || "").trim().slice(0, 120);
     console.log(`  ${badge(p.type)} \x1b[1m${p.path}\x1b[0m`);
     console.log(`  topic: ${p.topic || "—"}  ·  proposed: ${p.valid_at || "?"}`);
+    if (p.reconcile) {
+      const verb = p.reconcile === "duplicate" ? "\x1b[31m⧉ duplicate of\x1b[0m" : "\x1b[33m↻ updates\x1b[0m";
+      console.log(`  ${verb} ${p.reconcile_target}${p.reconcile_score ? ` (${p.reconcile_score})` : ""}`);
+    }
     if (preview) console.log(`  \x1b[90m${preview}…\x1b[0m`);
 
     const ans = (await prompt(rl, `  [a]pprove / [r]eject / [s]kip: `)).trim().toLowerCase();
