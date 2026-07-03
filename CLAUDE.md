@@ -10,6 +10,8 @@ CruxHive is a team AI knowledge governance layer. One human-curated knowledge ba
 
 **Human gate** (UI): `cruxhive-ui --workspace` serves a unified app — workspace rollup at `/`, each project mounted at `/p/{name}/` with its dashboard + a `/manage` page (search · create entries/constraints/rules · approve/retire · audit Activity tab).
 
+**Write-time reconciliation** (`reconcile.py`): every propose path (MCP tool, CLI, UI) classifies the new entry as add / update / duplicate against existing knowledge *and* the pending queue (token-Jaccard over BM25 candidates, no deps). Non-add verdicts are stamped into frontmatter (`reconcile:` / `reconcile_target:`) and surfaced in `list_pending`, the dashboard, and `/manage` — the reviewer approves a reconciled queue, not a pile. Advisory only; never blocks a proposal.
+
 ## Repo layout
 
 ```

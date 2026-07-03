@@ -68,6 +68,56 @@ def test_pending_lifecycle(project):
     conn.close()
 
 
+def test_pending_proposal_not_retrievable_until_approved(project):
+    """Approval gate: an unapproved AI proposal (source: ai-proposed) must never
+    surface in retrieval — otherwise an AI could propose an entry and have it
+    injected as binding context before any human reviews it."""
+    prop = project / ".llm" / "pending" / "constraint_tokens.md"
+    _write(prop,
+           "---\ntype: constraint\nscope: project\ntopic: token-handling\n"
+           "valid_at: 2026-05-29\nconfidence: high\nsource: ai-proposed\n"
+           "approved_by: ~\n---\n\nNever log raw bearer tokens anywhere.\n")
+    store.index(str(project))
+    conn = store.connect(str(project))
+
+    # It's indexed (so review/approve can see it) …
+    indexed = conn.execute(
+        "SELECT path FROM entries WHERE path=?", (".llm/pending/constraint_tokens.md",)
+    ).fetchall()
+    assert len(indexed) == 1
+    # … but NOT retrievable via any model-facing search path.
+    assert store.search_bm25(conn, "token-handling bearer", 5) == []
+    fused = store.rrf_fuse(store.search_bm25(conn, "token-handling", 5), [],
+                           conn=conn, query="token-handling")
+    assert all("constraint_tokens" not in h["path"] for h in fused)
+    # … and not pulled in as an approved constraint for conflict checks.
+    assert all("constraint_tokens" not in c["path"]
+               for c in store.list_approved_constraints(conn))
+
+    # After approval (source flips to human IN PLACE — file stays in pending/),
+    # the same entry becomes retrievable.
+    assert store.approve(conn, ".llm/pending/constraint_tokens.md", "tester", str(project))
+    hits = store.search_bm25(conn, "token-handling bearer", 5)
+    assert any("constraint_tokens" in h["path"] for h in hits)
+    conn.close()
+
+
+def test_search_active_entry_with_uppercase_null_invalid_at(project):
+    """SQL invalid_at filter must match Python _is_null (case/whitespace-insensitive).
+
+    `invalid_at: NULL` is null-ish → the entry has NO expiry → it is ACTIVE and
+    must surface. The old SQL only matched lowercase 'null', so it wrongly treated
+    such active entries as retired and hid them from search."""
+    _write(project / ".llm" / "context" / "active.md",
+           "---\ntype: fact\ntopic: liveness-topic\nvalid_at: 2026-05-01\n"
+           "invalid_at: NULL\nconfidence: high\nsource: human\n---\n\nStill valid.\n")
+    store.index(str(project))
+    conn = store.connect(str(project))
+    hits = store.search_bm25(conn, "liveness-topic", 5)
+    conn.close()
+    assert any("liveness-topic" in (h.get("topic") or "") for h in hits)
+
+
 def test_reject_sets_invalid_at_and_removes_from_index(project):
     pending = project / ".llm" / "pending" / "fact_bad.md"
     _write(pending,

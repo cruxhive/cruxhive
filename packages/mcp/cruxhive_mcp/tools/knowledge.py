@@ -269,6 +269,23 @@ def register(mcp: FastMCP) -> None:
             approved_by = "~"
             confidence = "medium"
 
+        # Reconcile BEFORE writing: classify this proposal as add/update/duplicate
+        # against existing knowledge + the pending queue, and stamp the verdict
+        # into the frontmatter so the reviewer approves a reconciled decision.
+        warnings: list[str] = []
+        reconcile_fm = ""
+        try:
+            from .. import reconcile as _reconcile
+            conn = _store.connect(root)
+            verdict = _reconcile.reconcile(conn, topic, type, content)
+            conn.close()
+            reconcile_fm = _reconcile.frontmatter_lines(verdict)
+            vmsg = _reconcile.verdict_message(verdict)
+            if vmsg:
+                warnings.append(vmsg)
+        except Exception:
+            pass  # fail open — verdict is advisory, never blocks a proposal
+
         entry = (
             f"---\n"
             f"type: {type}\n"
@@ -279,6 +296,7 @@ def register(mcp: FastMCP) -> None:
             f"confidence: {confidence}\n"
             f"source: {source_val}\n"
             f"approved_by: {approved_by}\n"
+            f"{reconcile_fm}"
             f"---\n\n"
             f"{content.strip()}\n"
         )
@@ -291,28 +309,10 @@ def register(mcp: FastMCP) -> None:
 
         rel = str(fpath.relative_to(root))
 
-        # Mem0-style conflict + similarity detection at propose time.
-        # Surfaces conflicts immediately so the proposer can decide to merge,
-        # replace, or withdraw before the human reviewer ever sees it.
-        warnings: list[str] = []
+        # NLI-based contradiction check against approved constraints
+        # (semantic layer on top of the token-overlap reconcile verdict).
         try:
             conn = _store.connect(root)
-
-            # Tier 1 — BM25 similarity check (always runs, no deps).
-            # Find top 3 existing entries similar to the new proposal's topic+content.
-            sim_q = f"{topic} {content[:200]}"
-            similar = _store.search_bm25(conn, sim_q, 5)
-            similar = [s for s in similar if s.get("path") != rel][:3]
-            if similar:
-                lines = ["⚠ **Similar existing entries** (review for redundancy):"]
-                for s in similar:
-                    lines.append(
-                        f"  · {s['path']} [{s.get('type','?')}] "
-                        f"{'approved' if s.get('approved_by') else 'pending'}"
-                    )
-                warnings.append("\n".join(lines))
-
-            # Tier 2 — NLI-based contradiction check against approved constraints.
             try:
                 from .. import nli as _nli
                 if _nli.is_available():

@@ -17,6 +17,32 @@ _SKIP_DIRS = {"__pycache__", ".git", "node_modules", "dist", "vendor"}
 # Null-ish YAML values treated as empty
 _NULL_VALUES = {"~", "null", "none", "", "~\n"}
 
+# SQL predicate matching _is_null() for invalid_at — an entry is "active" when
+# invalid_at is null-ish. Kept in sync with _is_null / _NULL_VALUES: TRIM handles
+# trailing whitespace/newlines, LOWER handles case. Without the LOWER/TRIM the
+# SQL diverged from Python and retired entries (invalid_at: NULL/None/"~ ")
+# leaked back into search.
+_SQL_ACTIVE = (
+    "(e.invalid_at IS NULL OR "
+    "LOWER(TRIM(COALESCE(e.invalid_at,''))) IN ('~','null','none',''))"
+)
+# The approval gate. Retrieval must never surface an *unapproved proposal*, or an
+# AI could context_propose an entry and have it injected as binding context before
+# any human reviews it. An entry is unapproved iff EITHER:
+#   (a) source == 'ai-proposed' — the standard marker the propose tools write; or
+#   (b) it sits in the .llm/pending/ review queue with no approver.
+# approve() flips source→human and stamps approved_by IN PLACE (it does NOT move
+# the file), and solo-mode writes source:human + approved_by directly — so both
+# approved-in-place and solo entries stay retrievable even while under pending/.
+# NULL/blank-source entries outside pending/ (plans, hand-authored context) are
+# trusted human knowledge and stay visible. LOWER/TRIM/COALESCE mirror _is_null.
+_SQL_APPROVED = (
+    "COALESCE(LOWER(TRIM(e.source)),'') != 'ai-proposed' "
+    "AND NOT (e.path LIKE '.llm/pending/%' AND "
+    "(e.approved_by IS NULL OR "
+    "LOWER(TRIM(COALESCE(e.approved_by,''))) IN ('~','null','none','')))"
+)
+
 
 def _is_null(v: str | None) -> bool:
     return v is None or v.strip().lower() in _NULL_VALUES
@@ -31,6 +57,16 @@ def connect(root: str) -> sqlite3.Connection:
     p.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(p))
     conn.row_factory = sqlite3.Row
+    # Concurrency: several entry points open their own connection and some write
+    # (propose→index, approve/reject, ephemeral stamping). Without these a writer
+    # racing a reader/indexer fails instantly with "database is locked". WAL lets
+    # readers and a writer coexist; busy_timeout makes contenders wait, not fail.
+    # Wrapped in try: PRAGMAs must never brick the store (e.g. read-only FS).
+    try:
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA journal_mode=WAL")
+    except sqlite3.Error:
+        pass
     _try_load_vec(conn)
     _init_schema(conn)
     _migrate(conn)
@@ -382,7 +418,7 @@ def search_bm25(conn: sqlite3.Connection, query: str, n: int = 10) -> list[dict]
     if not match:
         return []
     try:
-        rows = conn.execute("""
+        rows = conn.execute(f"""
             SELECT e.path, e.type, e.scope, e.topic, e.confidence,
                    e.source, e.approved_by, e.valid_at,
                    snippet(entries_fts, 1, '[', ']', '...', 24) AS snippet,
@@ -390,7 +426,8 @@ def search_bm25(conn: sqlite3.Connection, query: str, n: int = 10) -> list[dict]
             FROM entries_fts
             JOIN entries e ON e.id = entries_fts.rowid
             WHERE entries_fts MATCH ?
-              AND (e.invalid_at IS NULL OR e.invalid_at IN ('~','null','none',''))
+              AND {_SQL_ACTIVE}
+              AND {_SQL_APPROVED}
             ORDER BY rank
             LIMIT ?
         """, (match, n)).fetchall()
@@ -401,14 +438,15 @@ def search_bm25(conn: sqlite3.Connection, query: str, n: int = 10) -> list[dict]
 
 def search_vec(conn: sqlite3.Connection, query_vec_bytes: bytes, n: int = 10) -> list[dict]:
     try:
-        rows = conn.execute("""
+        rows = conn.execute(f"""
             SELECT e.path, e.type, e.scope, e.topic, e.confidence,
                    e.source, e.approved_by, e.valid_at,
                    '' AS snippet, v.distance AS rank
             FROM entry_vecs v
             JOIN entries e ON e.id = v.id
             WHERE v.vec MATCH ?
-              AND (e.invalid_at IS NULL OR e.invalid_at IN ('~','null','none',''))
+              AND {_SQL_ACTIVE}
+              AND {_SQL_APPROVED}
             ORDER BY v.distance
             LIMIT ?
         """, (query_vec_bytes, n)).fetchall()
@@ -444,7 +482,8 @@ def _entity_boost_paths(conn: sqlite3.Connection, query: str) -> dict[str, int]:
         FROM entry_entities ee
         JOIN entries e ON e.id = ee.entry_id
         WHERE ee.entity IN ({placeholders})
-          AND (e.invalid_at IS NULL OR e.invalid_at IN ('~','null','none',''))
+          AND {_SQL_ACTIVE}
+          AND {_SQL_APPROVED}
         GROUP BY e.path
     """, tuple(query_entities)).fetchall()
     return {r["path"]: r["shared"] for r in rows}
@@ -521,14 +560,25 @@ def rrf_fuse(
 def list_pending(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute("""
         SELECT path, type, scope, topic, confidence, source,
-               approved_by, valid_at,
-               substr(content, 1, 300) AS preview
+               approved_by, valid_at, content
         FROM entries
         WHERE source = 'ai-proposed'
           AND (approved_by IS NULL OR approved_by IN ('~','null','none',''))
         ORDER BY valid_at DESC
     """).fetchall()
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        d = dict(r)
+        # Preview from the body (not raw frontmatter), plus the reconcile
+        # verdict stamped at propose time so reviewers see "updates X" /
+        # "duplicate of Y" instead of an undifferentiated pile.
+        meta, body = _parse_fm(d.pop("content") or "")
+        d["preview"] = body.strip()[:300]
+        d["reconcile"] = meta.get("reconcile")
+        d["reconcile_target"] = meta.get("reconcile_target")
+        d["reconcile_score"] = meta.get("reconcile_score")
+        out.append(d)
+    return out
 
 
 def list_approved_constraints(conn: sqlite3.Connection) -> list[dict]:
@@ -538,7 +588,7 @@ def list_approved_constraints(conn: sqlite3.Connection) -> list[dict]:
         FROM entries
         WHERE type = 'constraint'
           AND source = 'human'
-          AND (invalid_at IS NULL OR invalid_at IN ('~','null','none',''))
+          AND (invalid_at IS NULL OR LOWER(TRIM(COALESCE(invalid_at,''))) IN ('~','null','none',''))
     """).fetchall()
     return [dict(r) for r in rows]
 

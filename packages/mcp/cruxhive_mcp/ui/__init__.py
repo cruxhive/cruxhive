@@ -51,6 +51,30 @@ if _FASTAPI_AVAILABLE:
         message: str = ""
 
 
+def _allowed_hosts() -> list[str]:
+    """Host-header allowlist for the dashboard.
+
+    The UI is unauthenticated and every mutating endpoint (approve/reject/retire/
+    update/propose/guardrail-rule) trusts the caller. Even bound to 127.0.0.1 that
+    leaves it open to DNS-rebinding: a site the developer visits can point its own
+    hostname at 127.0.0.1 and drive this API. A Host-header allowlist closes that
+    — the rebound request carries the attacker's hostname, which won't match.
+    Extend via CRUXHIVE_ALLOWED_HOSTS (comma-separated) when intentionally binding
+    to a non-loopback address for remote access.
+    """
+    hosts = ["localhost", "127.0.0.1", "::1", "testserver"]
+    extra = os.environ.get("CRUXHIVE_ALLOWED_HOSTS", "")
+    hosts += [h.strip() for h in extra.split(",") if h.strip()]
+    return hosts
+
+
+def _harden(app: "FastAPI") -> "FastAPI":  # type: ignore[name-defined]
+    """Apply the Host-header allowlist to an app (idempotent per app)."""
+    from starlette.middleware.trustedhost import TrustedHostMiddleware
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=_allowed_hosts())
+    return app
+
+
 _VALID_TYPES = {"fact", "decision", "plan", "pattern", "constraint", "research", "outcome"}
 
 
@@ -85,10 +109,23 @@ def _propose_entry(root: str, etype: str, topic: str, scope: str, content: str):
     solo_enabled, solo_approver = _ws.is_solo()
     source_val = "human" if solo_enabled else "ai-proposed"
     approved_by = solo_approver if solo_enabled else "~"
+
+    # Reconcile against existing knowledge + queue; stamp verdict for the reviewer.
+    reconcile_fm = ""
+    try:
+        from .. import reconcile as _reconcile
+        conn = _store.connect(root)
+        verdict = _reconcile.reconcile(conn, topic, etype, content)
+        conn.close()
+        reconcile_fm = _reconcile.frontmatter_lines(verdict)
+    except Exception:
+        pass  # advisory only
+
     fpath.write_text(
         f"---\ntype: {etype}\nscope: {scope or 'project'}\ntopic: {topic}\n"
         f"valid_at: {date}\ninvalid_at: ~\nconfidence: medium\n"
-        f"source: {source_val}\napproved_by: {approved_by}\n---\n\n{content}\n",
+        f"source: {source_val}\napproved_by: {approved_by}\n"
+        f"{reconcile_fm}---\n\n{content}\n",
         encoding="utf-8",
     )
     try:
@@ -354,6 +391,11 @@ _HTML = """<!doctype html>
 <div class="toast" id="toast"></div>
 <script>
 const ROOT = '';
+// Escape untrusted strings before innerHTML. Proposal previews/topics and logged
+// search queries are AI-authored, so they must never be interpolated raw — this
+// dashboard also performs privileged actions (approve/reject/retire).
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let approver = localStorage.getItem('cruxhive-approver') || '';
 
 document.getElementById('approver-input').value = approver;
@@ -377,7 +419,7 @@ document.querySelectorAll('nav.tabs button').forEach(b => {
 function badge(type) {
   const cls = ['fact','constraint','decision','pattern','plan','research','outcome']
     .includes(type) ? type : 'other';
-  return `<span class="badge badge-${cls}">${type||'?'}</span>`;
+  return `<span class="badge badge-${cls}">${esc(type)||'?'}</span>`;
 }
 
 function toast(msg, ok=true) {
@@ -467,18 +509,24 @@ async function loadApprovals() {
       ? `<div class="conflict-box">
            <div class="conflict-title">⚠ ${p.conflicts.length} potential conflict(s) with approved constraint(s)</div>
            ${p.conflicts.slice(0,3).map(c =>
-             `<div class="conflict-item">· [${c.severity}] ${c.path} (score: ${c.score}) — ${c.preview || ''}</div>`
+             `<div class="conflict-item">· [${esc(c.severity)}] ${esc(c.path)} (score: ${esc(c.score)}) — ${esc(c.preview)}</div>`
            ).join('')}
          </div>`
+      : '';
+    const reconcileHtml = p.reconcile
+      ? `<span class="pill" style="color:${p.reconcile==='duplicate'?'#f87171':'#f5a524'};border:1px solid ${p.reconcile==='duplicate'?'#f8717155':'#f5a52455'}">
+           ${p.reconcile==='duplicate'?'⧉ duplicate of':'↻ updates'} ${esc(p.reconcile_target)}${p.reconcile_score?` (${esc(p.reconcile_score)})`:''}
+         </span>`
       : '';
     return `
     <div class="card" id="card-${btoa(p.path)}">
       <div class="card-header">
         ${badge(p.type)}
-        <span class="path">${p.path}</span>
+        <span class="path">${esc(p.path)}</span>
+        ${reconcileHtml}
       </div>
-      <div class="meta">${p.topic ? `topic: ${p.topic} · ` : ''}proposed: ${p.valid_at||'?'}</div>
-      <div class="preview">${p.preview || ''}</div>
+      <div class="meta">${p.topic ? `topic: ${esc(p.topic)} · ` : ''}proposed: ${esc(p.valid_at)||'?'}</div>
+      <div class="preview">${esc(p.preview)}</div>
       ${conflictsHtml}
       <div class="actions">
         <button class="btn-approve" onclick="approve('${p.path}')">✓ Approve</button>
@@ -536,7 +584,7 @@ async function loadModels() {
   tb.innerHTML = rows.map(r => {
     const pct = r.searches ? (r.hits / r.searches * 100).toFixed(0) + '%' : '—';
     return `<tr>
-      <td>${r.client || 'unknown'}</td>
+      <td>${esc(r.client) || 'unknown'}</td>
       <td class="num">${r.calls}</td>
       <td class="num">${r.searches}</td>
       <td class="num">${pct}</td>
@@ -556,9 +604,9 @@ async function loadGaps() {
   gl.innerHTML = g.length
     ? g.map(x => `
         <div class="gap-row">
-          <span class="gap-q">${x.query}</span>
+          <span class="gap-q">${esc(x.query)}</span>
           <span class="pill">${x.times}×</span>
-          <span class="pill">${x.clients || '?'}</span>
+          <span class="pill">${esc(x.clients) || '?'}</span>
           <a href="manage?new=${encodeURIComponent(x.query)}"
              style="color:#f5a524;font-size:.72rem;margin-left:auto;text-decoration:none">document →</a>
         </div>`).join('')
@@ -570,7 +618,7 @@ async function loadGaps() {
         const d = new Date(x.mtime * 1000).toISOString().slice(0,10);
         return `<div class="gap-row">
           ${badge(x.type)}
-          <span class="path" style="flex:1">${x.path}</span>
+          <span class="path" style="flex:1">${esc(x.path)}</span>
           <span class="pill">${d}</span>
           <button onclick="retireStale('${x.path}')"
             style="background:transparent;border:1px solid #2a2a2a;color:#f87171;border-radius:.3rem;font-size:.72rem;padding:.2rem .5rem;cursor:pointer">retire</button>
@@ -733,7 +781,7 @@ async function loadGuard(){const d=await (await fetch('api/guardrails')).json();
 async function loadEntries(){const t=$('#ftype').value,q=$('#fq').value;
  const [pend,ent]=await Promise.all([fetch('api/pending').then(r=>r.json()).catch(()=>[]),fetch('api/entries?type='+t+'&q='+encodeURIComponent(q)).then(r=>r.json())]);
  let h='';
- if(pend.length){h+='<h3>Pending review ('+pend.length+')</h3>'+pend.map(p=>`<div class=card>${bdg(p.type)} <strong>${esc(p.topic)}</strong> <span class=meta>${p.path}</span>${(p.conflicts&&p.conflicts.length)?` <span class="pill off">⚠ ${p.conflicts.length} conflict</span>`:''}<div class=acts><button class=btn onclick="view('${p.path}')">view</button><button class=btn onclick="approve('${p.path}')">approve</button><button class="btn danger" onclick="rejectP('${p.path}')">reject</button></div></div>`).join('')}
+ if(pend.length){h+='<h3>Pending review ('+pend.length+')</h3>'+pend.map(p=>`<div class=card>${bdg(p.type)} <strong>${esc(p.topic)}</strong> <span class=meta>${p.path}</span>${p.reconcile?` <span class="pill off">${p.reconcile==='duplicate'?'⧉ dup of':'↻ updates'} ${esc(p.reconcile_target)}</span>`:''}${(p.conflicts&&p.conflicts.length)?` <span class="pill off">⚠ ${p.conflicts.length} conflict</span>`:''}<div class=acts><button class=btn onclick="view('${p.path}')">view</button><button class=btn onclick="approve('${p.path}')">approve</button><button class="btn danger" onclick="rejectP('${p.path}')">reject</button></div></div>`).join('')}
  h+='<h3>Knowledge entries</h3>'+(ent.length?ent.map(e=>`<div class=card>${bdg(e.type)} <strong>${esc(e.topic)||'(no topic)'}</strong> <span class=meta>${e.scope||''} · ${e.path}</span> <span class="pill ${e.active?'on':'off'}">${e.active?'active':'retired'}</span><div class=acts><button class=btn onclick="view('${e.path}')">view / edit</button>${e.active?`<button class="btn danger" onclick="retire('${e.path}')">retire</button>`:''}</div></div>`).join(''):'<div class=meta>No entries.</div>');
  $('#entries').innerHTML=h}
 async function view(p){const d=await (await fetch('api/entry?path='+encodeURIComponent(p))).json();$('#mtitle').textContent=p.split('/').pop();$('#mpath').textContent=p;$('#mcontent').value=d.content;$('#mcontent').dataset.path=p;openM('modal')}
@@ -759,7 +807,7 @@ def make_app(project_root: str | None = None) -> "FastAPI":  # type: ignore[name
         )
 
     root = project_root or os.getcwd()
-    app = FastAPI(title="CruxHive", docs_url=None, redoc_url=None)
+    app = _harden(FastAPI(title="CruxHive", docs_url=None, redoc_url=None))
 
     @app.get("/", response_class=HTMLResponse)
     def index():
@@ -1553,7 +1601,7 @@ def make_workspace_app() -> "FastAPI":  # type: ignore[name-defined]
 
     from .. import workspace as _ws
 
-    app = FastAPI(title="CruxHive Workspace", docs_url=None, redoc_url=None)
+    app = _harden(FastAPI(title="CruxHive Workspace", docs_url=None, redoc_url=None))
 
     @app.get("/", response_class=HTMLResponse)
     def index():
