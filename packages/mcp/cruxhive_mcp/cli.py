@@ -525,6 +525,20 @@ def doctor() -> None:
         except Exception as e:
             fail(f".mcp.json is malformed: {e}")
 
+    # Antigravity MCP config
+    ag_mcp = Path.home() / ".gemini" / "antigravity" / "mcp_config.json"
+    if not ag_mcp.exists():
+        warn("Antigravity mcp_config.json missing — run `cruxhive init` to wire Antigravity tools")
+    else:
+        try:
+            cfg = json.loads(ag_mcp.read_text())
+            if cfg.get("mcpServers", {}).get("cruxhive"):
+                ok("Antigravity mcp_config.json registers cruxhive-mcp")
+            else:
+                warn("Antigravity mcp_config.json present but missing cruxhive entry")
+        except Exception as e:
+            warn(f"Antigravity mcp_config.json is malformed: {e}")
+
     # AI tool wirings
     tool_files = [
         ("CLAUDE.md", "Claude Code"),
@@ -552,22 +566,36 @@ def doctor() -> None:
     else:
         warn(".gitignore missing — index/log will land in git unless added")
 
-    # Slash commands
+    # Slash commands / custom skills
     expected = {"radar", "next-slice", "review", "propose", "write-plan", "extract"}
     for dialect_dir, dialect_name in [
         (".claude/commands", "Claude Code"),
         (".opencode/commands", "OpenCode"),
+        (".agents/skills", "Antigravity"),
     ]:
         d = root / dialect_dir
         if not d.exists():
             warn(f"{dialect_dir}/ missing — slash commands not wired for {dialect_name}")
             continue
-        present = {f.stem for f in d.glob("*.md")}
+        if dialect_name == "Antigravity":
+            present = set()
+            try:
+                for item in d.iterdir():
+                    if item.is_dir() and (item / "SKILL.md").exists():
+                        present.add(item.name)
+            except Exception:
+                pass
+        else:
+            present = {f.stem for f in d.glob("*.md")}
+
         missing = expected - present
         if missing:
             warn(f"{dialect_dir}/ missing commands: {', '.join(sorted(missing))}")
         else:
-            ok(f"{dialect_dir}/ has all 6 slash commands")
+            if dialect_name == "Antigravity":
+                ok(f"{dialect_dir}/ has all 6 skills")
+            else:
+                ok(f"{dialect_dir}/ has all 6 slash commands")
 
     # platform_refs.md
     refs = root / ".llm" / "memory" / "platform_refs.md"

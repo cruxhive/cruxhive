@@ -92,21 +92,44 @@ function mcpEntry() {
 // ─── wire .mcp.json ────────────────────────────────────────────────────────
 
 function wireMcp(cwd) {
+  // 1. Workspace .mcp.json
   const mcpPath = join(cwd, ".mcp.json");
-  let cfg = existsSync(mcpPath)
-    ? JSON.parse(readFileSync(mcpPath, "utf8"))
-    : { mcpServers: {} };
-
+  let cfg = { mcpServers: {} };
+  if (existsSync(mcpPath)) {
+    try {
+      const text = readFileSync(mcpPath, "utf8").trim();
+      if (text) cfg = JSON.parse(text);
+    } catch {}
+  }
   if (!cfg.mcpServers) cfg.mcpServers = {};
 
   if (cfg.mcpServers.cruxhive) {
     info(".mcp.json already has cruxhive entry");
-    return;
+  } else {
+    cfg.mcpServers.cruxhive = mcpEntry();
+    writeFileSync(mcpPath, JSON.stringify(cfg, null, 2) + "\n");
+    ok("cruxhive-mcp registered in .mcp.json");
   }
 
-  cfg.mcpServers.cruxhive = mcpEntry();
-  writeFileSync(mcpPath, JSON.stringify(cfg, null, 2) + "\n");
-  ok("cruxhive-mcp registered in .mcp.json");
+  // 2. Global Antigravity mcp_config.json
+  const agMcpPath = join(homedir(), ".gemini", "antigravity", "mcp_config.json");
+  let agCfg = { mcpServers: {} };
+  if (existsSync(agMcpPath)) {
+    try {
+      const text = readFileSync(agMcpPath, "utf8").trim();
+      if (text) agCfg = JSON.parse(text);
+    } catch {}
+  }
+  if (!agCfg.mcpServers) agCfg.mcpServers = {};
+
+  if (agCfg.mcpServers.cruxhive) {
+    info("Antigravity mcp_config.json already has cruxhive entry");
+  } else {
+    agCfg.mcpServers.cruxhive = mcpEntry();
+    mkdirSync(dirname(agMcpPath), { recursive: true });
+    writeFileSync(agMcpPath, JSON.stringify(agCfg, null, 2) + "\n");
+    ok("cruxhive-mcp registered in Antigravity mcp_config.json");
+  }
 }
 
 // ─── wire AI tool context files ────────────────────────────────────────────
@@ -318,23 +341,28 @@ Terse. No prose explanations. The candidates list + the review question + the fi
 };
 
 function writeCommandFile(filePath, name, def, dialect) {
+  const relPath = dialect === "antigravity"
+    ? `.agents/skills/${name}/SKILL.md`
+    : `${dialect}/commands/${name}.md`;
+
   if (existsSync(filePath)) {
-    info(`${dialect}/commands/${name}.md already exists — skipped`);
+    info(`${relPath} already exists — skipped`);
     return;
   }
   mkdirSync(dirname(filePath), { recursive: true });
-  // Claude Code uses { name, description }; OpenCode uses { description }
-  const fm = dialect === "claude"
+  // Claude Code and Antigravity use { name, description }; OpenCode uses { description }
+  const fm = (dialect === "claude" || dialect === "antigravity")
     ? `---\nname: ${name}\ndescription: ${def.description}\n---\n\n`
     : `---\ndescription: ${def.description}\n---\n\n`;
   writeFileSync(filePath, fm + def.body + "\n");
-  ok(`${dialect}/commands/${name}.md created`);
+  ok(`${relPath} created`);
 }
 
 function wireSlashCommands(cwd) {
   for (const [name, def] of Object.entries(SLASH_COMMANDS)) {
     writeCommandFile(join(cwd, ".claude", "commands", `${name}.md`), name, def, ".claude");
     writeCommandFile(join(cwd, ".opencode", "commands", `${name}.md`), name, def, ".opencode");
+    writeCommandFile(join(cwd, ".agents", "skills", name, "SKILL.md"), name, def, "antigravity");
   }
 }
 
