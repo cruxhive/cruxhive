@@ -15,10 +15,11 @@ const { doctor } = require("../lib/doctor");
 const { workspace } = require("../lib/workspace");
 const { direnv }    = require("../lib/direnv");
 const { solo }      = require("../lib/solo");
+const { skills }    = require("../lib/skills");
 
 const [, , cmd, ...args] = process.argv;
 
-const commands = { init, sync, health, ui, index, propose, review, stats, digest, status, doctor, workspace, direnv, solo };
+const commands = { init, sync, health, ui, index, propose, review, stats, digest, status, doctor, workspace, direnv, solo, skills };
 
 if (!cmd || cmd === "--help" || cmd === "-h") {
   console.log(`cruxhive v${require("../package.json").version}
@@ -38,6 +39,8 @@ Commands:
   doctor    Diagnose CruxHive setup — symlinks, hooks, slash commands
   workspace Cross-project rollup — aggregate KPIs across all configured projects
   direnv    Write a .envrc that auto-logs sessions for Cursor/Windsurf/Gemini
+  skills    Sync a canonical skills dir to every AI-tool dialect
+            (cruxhive skills sync [--from <dir>], default source .llm/skills/)
   solo      Enable/disable solo mode — auto-approve your own proposals
             Run with --status to check current mode, --disable to turn off
   ui        Open the approval queue dashboard (localhost:3847)

@@ -1,7 +1,7 @@
 "use strict";
 
 const { spawnSync } = require("child_process");
-const { mkdirSync, writeFileSync, existsSync, readFileSync, symlinkSync } = require("fs");
+const { mkdirSync, writeFileSync, existsSync, readFileSync, symlinkSync, renameSync } = require("fs");
 const { homedir } = require("os");
 const { join, dirname } = require("path");
 
@@ -370,8 +370,19 @@ function wireAiTools(cwd) {
   const tools = [
     // Claude Code
     { check: () => true, wire: () => patchOrSymlink(join(cwd, "CLAUDE.md"), "CLAUDE.md") },
-    // OpenCode
-    { check: () => true, wire: () => trySymlink(CONTEXT_REL, join(cwd, "AGENT.md"), "AGENT.md") },
+    // OpenCode (AGENTS.md — OpenCode renamed the convention from AGENT.md)
+    { check: () => true, wire: () => {
+      const legacy = join(cwd, "AGENT.md");
+      const current = join(cwd, "AGENTS.md");
+      if (!existsSync(current) && existsSync(legacy)) {
+        try {
+          renameSync(legacy, current);
+          ok("AGENT.md → AGENTS.md (renamed to current OpenCode convention)");
+          return;
+        } catch { /* fall through to symlink */ }
+      }
+      trySymlink(CONTEXT_REL, current, "AGENTS.md");
+    } },
     // Cursor
     { check: () => true, wire: () => trySymlink(CONTEXT_REL, join(cwd, ".cursor/rules/cruxhive.mdc"), ".cursor/rules/cruxhive.mdc") },
     // Windsurf

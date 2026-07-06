@@ -542,7 +542,7 @@ def doctor() -> None:
     # AI tool wirings
     tool_files = [
         ("CLAUDE.md", "Claude Code"),
-        ("AGENT.md", "OpenCode"),
+        ("AGENTS.md", "OpenCode"),
         (".cursor/rules/cruxhive.mdc", "Cursor"),
         (".windsurfRules", "Windsurf"),
         ("GEMINI.md", "Gemini CLI"),
