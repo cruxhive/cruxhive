@@ -4,7 +4,7 @@
 
 CruxHive is a team AI knowledge governance layer. One human-curated knowledge base, every AI tool reads from it: Claude Code, OpenCode, Cursor, Windsurf, Gemini CLI. Local SQLite, MIT licensed, zero cloud dependency.
 
-**Status**: Published. `cruxhive-mcp@0.19.0` on PyPI · `@cruxhive/cli@0.19.0` on npm. (0.19: approval gate enforced at retrieval, write-time reconciliation, UI XSS/DNS-rebind hardening, guardrail regex fixes, SQLite WAL.)
+**Status**: Published. `cruxhive-mcp@0.19.2` on PyPI · `@cruxhive/cli@0.20.0` on npm. (0.19: approval gate enforced at retrieval, write-time reconciliation, UI XSS/DNS-rebind hardening, guardrail regex fixes, SQLite WAL. 0.20 CLI: `cruxhive skills sync` — one canonical skills dir distributed to Claude Code/OpenCode/Antigravity dialects; OpenCode wiring renamed AGENT.md → AGENTS.md.)
 
 **Enforcement & retrieval** (0.13–0.18): `cruxhive-inject` (UserPromptSubmit hook — forces retrieval-as-context) · `cruxhive-guardrails` (PreToolUse hook — denies secret commits / force-push / merged-migration edits; `--list` to inspect; extend via `.llm/guardrails.toml`). `cruxhive init` wires both by default. Search uses keyword-OR FTS (`store.fts_or_query`) so natural-language queries match.
 
