@@ -539,7 +539,8 @@ def doctor() -> None:
         except Exception as e:
             warn(f"Antigravity mcp_config.json is malformed: {e}")
 
-    # AI tool wirings
+    # AI tool wirings — verify symlinks resolve to .llm/CONTEXT.md
+    ctx_resolved = ctx.resolve()
     tool_files = [
         ("CLAUDE.md", "Claude Code"),
         ("AGENTS.md", "OpenCode"),
@@ -547,15 +548,52 @@ def doctor() -> None:
         (".windsurfRules", "Windsurf"),
         ("GEMINI.md", "Gemini CLI"),
     ]
-    missing_tools = []
+    missing_tools: list[str] = []
+    broken_tools: list[str] = []
+
+    def _check_context_symlink(p: Path, tname: str) -> None:
+        if not p.exists() and not p.is_symlink():
+            missing_tools.append(f"{tname} ({p.as_posix()})")
+            return
+        if not p.is_symlink():
+            return
+        try:
+            resolved = (p.parent / p.readlink()).resolve()
+        except OSError:
+            broken_tools.append(f"{tname} ({p.as_posix()} — broken symlink)")
+            return
+        if resolved != ctx_resolved:
+            broken_tools.append(
+                f"{tname} ({p.as_posix()} → {p.readlink()}, expected .llm/CONTEXT.md)"
+            )
+
     for fname, tname in tool_files:
-        p = root / fname
-        if not (p.exists() or p.is_symlink()):
-            missing_tools.append(f"{tname} ({fname})")
+        _check_context_symlink(root / fname, tname)
+
     if missing_tools:
         warn(f"AI tool wirings missing for: {', '.join(missing_tools)}")
-    else:
-        ok("All 5 AI tool wirings present")
+    if broken_tools:
+        for item in broken_tools:
+            fail(f"{item} — run `cruxhive init` to repair")
+    if not missing_tools and not broken_tools:
+        ok("All 5 AI tool wirings point at .llm/CONTEXT.md")
+
+    # Cursor MCP mirror
+    cursor_mcp = root / ".cursor" / "mcp.json"
+    root_mcp = root / ".mcp.json"
+    if not cursor_mcp.exists() and not cursor_mcp.is_symlink():
+        warn(".cursor/mcp.json missing — run `cruxhive init` (Cursor MCP won't auto-load)")
+    elif cursor_mcp.is_symlink():
+        try:
+            mcp_resolved = (cursor_mcp.parent / cursor_mcp.readlink()).resolve()
+            if mcp_resolved == root_mcp.resolve():
+                ok(".cursor/mcp.json → .mcp.json")
+            else:
+                fail(".cursor/mcp.json symlink points at the wrong file — run `cruxhive init`")
+        except OSError:
+            fail(".cursor/mcp.json is a broken symlink — run `cruxhive init`")
+    elif cursor_mcp.exists():
+        warn(".cursor/mcp.json exists but is not a symlink to .mcp.json")
 
     # .gitignore
     gi = root / ".gitignore"

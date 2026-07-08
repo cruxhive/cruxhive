@@ -1,9 +1,19 @@
 "use strict";
 
 const { spawnSync } = require("child_process");
-const { mkdirSync, writeFileSync, existsSync, readFileSync, symlinkSync, renameSync } = require("fs");
+const {
+  mkdirSync,
+  writeFileSync,
+  existsSync,
+  readFileSync,
+  symlinkSync,
+  renameSync,
+  lstatSync,
+  readlinkSync,
+  unlinkSync,
+} = require("fs");
 const { homedir } = require("os");
-const { join, dirname } = require("path");
+const { join, dirname, relative, resolve } = require("path");
 
 const CONTEXT_TEMPLATE = (projectName, date) => `---
 type: fact
@@ -130,28 +140,83 @@ function wireMcp(cwd) {
     writeFileSync(agMcpPath, JSON.stringify(agCfg, null, 2) + "\n");
     ok("cruxhive-mcp registered in Antigravity mcp_config.json");
   }
+
+  // 3. Cursor reads MCP from .cursor/mcp.json — mirror the workspace config.
+  wireCursorMcp(cwd);
+}
+
+function wireCursorMcp(cwd) {
+  const rootMcp = join(cwd, ".mcp.json");
+  const cursorMcp = join(cwd, ".cursor", "mcp.json");
+  if (!existsSync(rootMcp)) {
+    info(".mcp.json missing — skipping .cursor/mcp.json");
+    return;
+  }
+  const target = relative(dirname(cursorMcp), rootMcp);
+  trySymlinkTo(cursorMcp, target, ".cursor/mcp.json", { cwd, expectResolved: resolve(rootMcp) });
 }
 
 // ─── wire AI tool context files ────────────────────────────────────────────
 
-const CONTEXT_REL = ".llm/CONTEXT.md";
+const CONTEXT_CANONICAL = join(".llm", "CONTEXT.md");
 
-function trySymlink(target, linkPath, label) {
-  if (existsSync(linkPath)) {
-    info(`${label} already exists — skipped`);
-    return;
+function contextAbs(cwd) {
+  return resolve(cwd, CONTEXT_CANONICAL);
+}
+
+function contextRelTarget(linkPath, cwd) {
+  return relative(dirname(linkPath), contextAbs(cwd));
+}
+
+function symlinkResolved(linkPath) {
+  return resolve(dirname(linkPath), readlinkSync(linkPath));
+}
+
+/** Create or repair a symlink; skips non-symlink files unless missing. */
+function trySymlinkTo(linkPath, target, label, { cwd, expectResolved } = {}) {
+  const expected = expectResolved ?? (cwd ? contextAbs(cwd) : null);
+
+  try {
+    const st = lstatSync(linkPath);
+    if (st.isSymbolicLink()) {
+      if (expected && symlinkResolved(linkPath) === expected) {
+        info(`${label} already wired`);
+        return;
+      }
+      unlinkSync(linkPath);
+      ok(`${label} had wrong target — repairing symlink`);
+    } else {
+      info(`${label} already exists (not a symlink) — skipped`);
+      return;
+    }
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
   }
+
   try {
     mkdirSync(dirname(linkPath), { recursive: true });
     symlinkSync(target, linkPath);
-    ok(`${label} → ${CONTEXT_REL} (symlink)`);
+    ok(`${label} → ${target} (symlink)`);
   } catch {
-    warn(`Could not create ${label} symlink — create it manually: ln -s ${CONTEXT_REL} ${linkPath}`);
+    warn(`Could not create ${label} symlink — create it manually: ln -s ${target} ${label}`);
   }
 }
 
-function patchOrSymlink(filePath, label) {
+function trySymlink(linkPath, label, cwd) {
+  trySymlinkTo(linkPath, contextRelTarget(linkPath, cwd), label, { cwd });
+}
+
+function patchOrSymlink(filePath, label, cwd) {
   if (existsSync(filePath)) {
+    try {
+      const st = lstatSync(filePath);
+      if (st.isSymbolicLink()) {
+        trySymlink(filePath, label, cwd);
+        return;
+      }
+    } catch {
+      /* fall through */
+    }
     const content = readFileSync(filePath, "utf8");
     if (content.includes("CONTEXT.md")) {
       info(`${label} already references CONTEXT.md`);
@@ -160,7 +225,7 @@ function patchOrSymlink(filePath, label) {
     writeFileSync(filePath, content.trimEnd() + "\n\n<!-- CruxHive canonical context: .llm/CONTEXT.md -->\n");
     ok(`${label} patched with CONTEXT.md reference`);
   } else {
-    trySymlink(CONTEXT_REL, filePath, label);
+    trySymlink(filePath, label, cwd);
   }
 }
 
@@ -369,7 +434,7 @@ function wireSlashCommands(cwd) {
 function wireAiTools(cwd) {
   const tools = [
     // Claude Code
-    { check: () => true, wire: () => patchOrSymlink(join(cwd, "CLAUDE.md"), "CLAUDE.md") },
+    { check: () => true, wire: () => patchOrSymlink(join(cwd, "CLAUDE.md"), "CLAUDE.md", cwd) },
     // OpenCode (AGENTS.md — OpenCode renamed the convention from AGENT.md)
     { check: () => true, wire: () => {
       const legacy = join(cwd, "AGENT.md");
@@ -381,14 +446,14 @@ function wireAiTools(cwd) {
           return;
         } catch { /* fall through to symlink */ }
       }
-      trySymlink(CONTEXT_REL, current, "AGENTS.md");
+      trySymlink(current, "AGENTS.md", cwd);
     } },
     // Cursor
-    { check: () => true, wire: () => trySymlink(CONTEXT_REL, join(cwd, ".cursor/rules/cruxhive.mdc"), ".cursor/rules/cruxhive.mdc") },
+    { check: () => true, wire: () => trySymlink(join(cwd, ".cursor/rules/cruxhive.mdc"), ".cursor/rules/cruxhive.mdc", cwd) },
     // Windsurf
-    { check: () => true, wire: () => trySymlink(CONTEXT_REL, join(cwd, ".windsurfRules"), ".windsurfRules") },
+    { check: () => true, wire: () => trySymlink(join(cwd, ".windsurfRules"), ".windsurfRules", cwd) },
     // Gemini CLI
-    { check: () => true, wire: () => trySymlink(CONTEXT_REL, join(cwd, "GEMINI.md"), "GEMINI.md") },
+    { check: () => true, wire: () => trySymlink(join(cwd, "GEMINI.md"), "GEMINI.md", cwd) },
   ];
 
   for (const t of tools) t.wire();
