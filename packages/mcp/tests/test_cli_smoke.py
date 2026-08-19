@@ -9,6 +9,7 @@ where the package is freshly installed before running.
 """
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import shutil
 import subprocess
@@ -19,7 +20,13 @@ import pytest
 
 
 def _bin_available(name: str) -> bool:
-    return shutil.which(name) is not None
+    # In CI the package is installed before the run, so a missing entry point is
+    # a real breakage, not a reason to skip. CRUXHIVE_REQUIRE_BINS turns the
+    # silent skip into a failure so the suite's pass count can't quietly shrink.
+    found = shutil.which(name) is not None
+    if not found and __import__("os").environ.get("CRUXHIVE_REQUIRE_BINS"):
+        pytest.fail(f"{name} not on PATH (CRUXHIVE_REQUIRE_BINS is set)")
+    return found
 
 
 def _run(args: list[str], cwd: Path | None = None, stdin: str | None = None) -> tuple[int, str, str]:
@@ -39,8 +46,12 @@ def initialized_project(tmp_path):
     (tmp_path / ".llm" / "plans").mkdir()
     (tmp_path / ".llm" / "memory").mkdir()
     (tmp_path / ".llm" / "pending").mkdir()
+    # valid_at must be relative: a hardcoded date eventually ages past
+    # store._DECAY_HIGH_DAYS and silently turns "clean project" fixtures into
+    # decayed ones, breaking tests on a calendar rather than on a code change.
+    today = _dt.date.today().isoformat()
     (tmp_path / ".llm" / "CONTEXT.md").write_text(
-        "---\ntype: fact\ntopic: project-context\nvalid_at: 2026-05-29\n"
+        f"---\ntype: fact\ntopic: project-context\nvalid_at: {today}\n"
         "confidence: high\nsource: human\napproved_by: alice\n---\n\nA test project.\n"
     )
     return tmp_path

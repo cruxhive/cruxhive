@@ -1,6 +1,7 @@
 """Shared test fixtures."""
 from __future__ import annotations
 
+import datetime as _dt
 import os
 from pathlib import Path
 
@@ -14,13 +15,15 @@ def project(tmp_path: Path) -> Path:
     (tmp_path / ".llm" / "context").mkdir()
     (tmp_path / ".llm" / "memory").mkdir()
     (tmp_path / ".llm" / "pending").mkdir()
-    # A simple CONTEXT.md so index has something to find
+    # A simple CONTEXT.md so index has something to find. valid_at is relative:
+    # a hardcoded date ages past store._DECAY_HIGH_DAYS and starts failing
+    # decay-sensitive tests on a calendar rather than on a code change.
     (tmp_path / ".llm" / "CONTEXT.md").write_text(
         "---\n"
         "type: fact\n"
         "scope: project\n"
         "topic: project-context\n"
-        "valid_at: 2026-05-01\n"
+        f"valid_at: {_dt.date.today().isoformat()}\n"
         "confidence: high\n"
         "source: human\n"
         "approved_by: tester\n"

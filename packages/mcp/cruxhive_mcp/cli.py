@@ -1120,6 +1120,57 @@ def search() -> None:
         )
 
 
+def _relevance_floor(conn, hits: list, prompt: str, min_shared: int = 2) -> list:
+    """Drop hits that share too few distinct content words with the prompt.
+
+    `store.fts_or_query` ORs every token in the prompt, and nothing downstream
+    applies a score threshold — so a single stray word match was enough to pull
+    a document into the injected context of every turn. ("proceed as
+    recommended" retrieved three unrelated deploy-safety docs purely on the
+    words "proceed" and "recommended".) Requiring two distinct shared words
+    keeps genuine topical queries working — a real question shares several
+    terms with a relevant entry — while removing one-word coincidences.
+
+    Prompts with only one usable content word can't clear the bar, so they
+    retrieve nothing rather than something arbitrary.
+    """
+    import re
+
+    from . import store as _store
+
+    q_tokens = {
+        t for t in re.findall(r"[A-Za-z0-9_]+", (prompt or "").lower())
+        if len(t) >= 3 and t not in _store._FTS_STOP
+    }
+    if len(q_tokens) < min_shared:
+        return []
+
+    paths = [h.get("path") for h in hits if h.get("path")]
+    if not paths:
+        return []
+    ph = ",".join("?" * len(paths))
+    try:
+        rows = conn.execute(
+            f"SELECT path, topic, content FROM entries WHERE path IN ({ph})",
+            tuple(paths),
+        ).fetchall()
+    except Exception:
+        return hits  # never block the prompt on a filtering failure
+    text_by_path = {
+        r["path"]: f"{r['topic'] or ''} {r['content'] or ''}".lower() for r in rows
+    }
+
+    kept = []
+    for h in hits:
+        blob = text_by_path.get(h.get("path"))
+        if blob is None:
+            continue
+        words = set(re.findall(r"[A-Za-z0-9_]+", blob))
+        if len(q_tokens & words) >= min_shared:
+            kept.append(h)
+    return kept
+
+
 def inject() -> None:
     """cruxhive-inject: UserPromptSubmit hook — auto-retrieve project knowledge.
 
@@ -1164,6 +1215,7 @@ def inject() -> None:
         # raw prompt is fine here; rrf_fuse keeps the raw prompt for entity boost.
         bm25 = _store.search_bm25(conn, prompt, 8)
         hits = _store.rrf_fuse(bm25, [], conn=conn, query=prompt)[:6]
+        hits = _relevance_floor(conn, hits, prompt)
         conn.close()
     except Exception:
         return

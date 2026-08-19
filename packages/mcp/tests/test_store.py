@@ -318,3 +318,57 @@ def test_save_and_load_config_roundtrip(monkeypatch, tmp_path):
     loaded = ws.load_config()
     assert loaded["solo"]["enabled"] is True
     assert loaded["solo"]["approver"] == "bob"
+
+
+def test_frontmatter_is_not_indexed_into_fts(project):
+    """entries.content feeds the FTS index — frontmatter must stay out of it.
+
+    Storing the raw file put every metadata token (approved, human, high,
+    confidence, project, ...) into the index, so a query containing any of them
+    matched most of the corpus and BM25 lost all discrimination.
+    """
+    _write(project / ".llm" / "context" / "vendor.md",
+           "---\ntype: decision\ntopic: vendor\nvalid_at: 2026-05-01\n"
+           "confidence: high\nsource: human\napproved_by: tester\n---\n\n"
+           "We picked Hetzner for compute.\n")
+    store.index(str(project))
+    conn = store.connect(str(project))
+    fts = lambda m: conn.execute(
+        "SELECT count(*) FROM entries_fts WHERE entries_fts MATCH ?", (m,)
+    ).fetchone()[0]
+    assert fts('"approved_by" OR "ai-proposed" OR "confidence"') == 0
+    # ...while real body text stays searchable
+    assert fts('"hetzner"') == 1
+    conn.close()
+
+
+def test_deleted_file_is_removed_from_index(project):
+    """A .md removed from disk must stop being searchable and injectable.
+
+    Without an un-index pass a deleted entry stayed retrievable forever, which
+    is a privacy problem as much as a correctness one.
+    """
+    p = project / ".llm" / "context" / "temp-secret.md"
+    _write(p, "---\ntype: fact\ntopic: temp\nvalid_at: 2026-05-01\n"
+              "confidence: high\nsource: human\n---\n\nQuokka staging password rotates.\n")
+    store.index(str(project))
+    conn = store.connect(str(project))
+    assert conn.execute(
+        "SELECT count(*) FROM entries WHERE path=?", (".llm/context/temp-secret.md",)
+    ).fetchone()[0] == 1
+    conn.close()
+
+    p.unlink()
+    store.index(str(project))
+    conn = store.connect(str(project))
+    assert conn.execute(
+        "SELECT count(*) FROM entries WHERE path=?", (".llm/context/temp-secret.md",)
+    ).fetchone()[0] == 0
+    assert conn.execute(
+        "SELECT count(*) FROM entries_fts WHERE entries_fts MATCH ?", ('"quokka"',)
+    ).fetchone()[0] == 0
+    # unrelated entries survive the prune
+    assert conn.execute(
+        "SELECT count(*) FROM entries WHERE path=?", (".llm/CONTEXT.md",)
+    ).fetchone()[0] == 1
+    conn.close()

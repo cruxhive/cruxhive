@@ -339,7 +339,16 @@ def index(root: str, embedder=None) -> int:
             meta.get("type"), meta.get("scope"), meta.get("topic"),
             meta.get("valid_at"), meta.get("invalid_at"),
             meta.get("confidence"), meta.get("source"), meta.get("approved_by"),
-            text, mtime,
+            # Index the BODY, not the raw file. entries.content is the FTS5
+            # external-content source, so storing `text` put every frontmatter
+            # token (approved, human, high, medium, project, confidence, ...)
+            # into the index — queries containing any of them matched most of
+            # the corpus and BM25 lost all discrimination. The metadata is
+            # already in its own columns, which is what filtering uses.
+            # NOTE: existing databases keep the old rows until a reindex; the
+            # mtime short-circuit above skips unchanged files, so run
+            # `cruxhive-index --rebuild` once to get the benefit.
+            body, mtime,
         ))
         # Resolve the row id once — used for both vector + entity updates
         try:
@@ -375,6 +384,26 @@ def index(root: str, embedder=None) -> int:
                 pass
 
         count += 1
+
+    # Drop rows whose file no longer exists. Without this, deleting a .md file
+    # left it fully searchable and injectable forever — the only remedy was
+    # --rebuild. That is a privacy problem as much as a correctness one: a
+    # deleted entry containing sensitive detail kept being retrieved and fed
+    # into agent context. Scoped to the roots we just scanned so a personal
+    # layer that was not walked on this pass is never pruned.
+    scanned = {rel for _fp, rel in files}
+    prefixes = [".llm/"]
+    if PERSONAL_ROOT.exists():
+        prefixes.append("personal:")
+    for row in conn.execute("SELECT path FROM entries").fetchall():
+        rel = row["path"]
+        if rel in scanned:
+            continue
+        if not any(rel.startswith(p) for p in prefixes):
+            continue
+        conn.execute("DELETE FROM entries WHERE path=?", (rel,))
+        count += 1
+
     conn.commit()
     conn.close()
     return count
@@ -557,6 +586,22 @@ def rrf_fuse(
 
 # ── Proposals ─────────────────────────────────────────────────────────────────
 
+def _root_of(conn: sqlite3.Connection) -> str | None:
+    """Recover the project root from an open connection.
+
+    connect() opens <root>/.llm/cruxhive.db, so the root is the db file's
+    grandparent. Lets helpers reach the source files without threading `root`
+    through every call site. Returns None for in-memory or unexpected layouts.
+    """
+    try:
+        for _seq, name, filename in conn.execute("PRAGMA database_list"):
+            if name == "main" and filename:
+                return str(Path(filename).resolve().parent.parent)
+    except Exception:
+        pass
+    return None
+
+
 def list_pending(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute("""
         SELECT path, type, scope, topic, confidence, source,
@@ -566,14 +611,27 @@ def list_pending(conn: sqlite3.Connection) -> list[dict]:
           AND (approved_by IS NULL OR approved_by IN ('~','null','none',''))
         ORDER BY valid_at DESC
     """).fetchall()
+    root = _root_of(conn)
     out = []
     for r in rows:
         d = dict(r)
-        # Preview from the body (not raw frontmatter), plus the reconcile
-        # verdict stamped at propose time so reviewers see "updates X" /
-        # "duplicate of Y" instead of an undifferentiated pile.
+        # Preview from the body, plus the reconcile verdict stamped at propose
+        # time so reviewers see "updates X" / "duplicate of Y" instead of an
+        # undifferentiated pile.
+        #
+        # `reconcile*` live only in the file's frontmatter — they have no
+        # columns — and entries.content now holds the BODY (frontmatter is kept
+        # out of the FTS index). So read the file for them, falling back to
+        # parsing content for databases indexed before that change.
         meta, body = _parse_fm(d.pop("content") or "")
         d["preview"] = body.strip()[:300]
+        if not meta and root:
+            try:
+                raw = (Path(root) / d["path"]).read_text(
+                    encoding="utf-8", errors="replace")
+                meta, _ = _parse_fm(raw)
+            except Exception:
+                pass
         d["reconcile"] = meta.get("reconcile")
         d["reconcile_target"] = meta.get("reconcile_target")
         d["reconcile_score"] = meta.get("reconcile_score")

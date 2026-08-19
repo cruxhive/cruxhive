@@ -40,19 +40,20 @@ async function sync(_args) {
     return;
   }
 
-  // Try git-based org remote (Phase 4 pattern)
+  // Git-based org remote: disabled. `.llm/` is a subdirectory of the project
+  // repo, not a repo of its own, so `git pull --rebase <remote> main` with
+  // cwd=.llm walked up and rebased the user's ENTIRE PROJECT onto an unrelated
+  // org-context remote. Nothing ever created cruxhive.config.yaml, so this path
+  // was unreachable in practice — but it must not be re-enabled as written.
+  // A correct implementation clones the org remote to its own directory
+  // outside the project tree and copies entries in.
   const remote = getOrgRemote(cwd);
   if (remote) {
-    console.log(`  Pulling org context from: ${remote}`);
-    const r = spawnSync("git", ["pull", "--rebase", remote, "main"], {
-      cwd: join(cwd, ".llm"),
-      stdio: "inherit",
-    });
-    if (r.status === 0) {
-      ok("Org context synced from remote");
-    } else {
-      err("git pull failed — check your org_remote in cruxhive.config.yaml");
-    }
+    err("Git-based org sync is disabled (it rebased the parent project repo).");
+    console.log(`
+  Your cruxhive.config.yaml sets org_remote: ${remote}
+  Track re-implementation before relying on this path.
+`);
     return;
   }
 
@@ -60,8 +61,7 @@ async function sync(_args) {
   console.log(`
   Options:
     1. Workspace sync script at ../scripts/sync-platform-memory.sh
-    2. Set org_remote in cruxhive.config.yaml for git-based org sync
-    3. Use Mozbridge for managed cloud sync (Phase 6)
+    2. Git-based org sync — disabled pending a safe re-implementation
 `);
 }
 
