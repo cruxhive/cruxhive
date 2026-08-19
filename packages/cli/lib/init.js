@@ -377,7 +377,7 @@ Print candidates as a numbered list, terse:
 2. [NEW] [constraint] secrets — never commit API keys to git (use Vault)
 3. [DUP] hetzner — already covered in .llm/memory/platform_refs.md
 4. [UPDATE: .llm/decisions/db.md] [decision] database — switching from MySQL to PostgreSQL
-5. [NEW] [fact] hosts — platform IP is 91.99.212.250
+5. [NEW] [fact] hosts — platform IP is 203.0.113.10
 \`\`\`
 
 Then ask exactly: "Which would you like to propose? (numbers, 'all-new', or 'none')"

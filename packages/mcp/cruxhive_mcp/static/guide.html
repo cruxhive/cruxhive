@@ -558,7 +558,7 @@
         <h3>Entity-aware search</h3>
         <p>At index time, CruxHive extracts simple entities from each entry: snake_case identifiers, ALL_CAPS constants, IPv4s, hostnames, filenames with extensions. At search time, queries that mention any of those entities boost matching entries — and pull in entries BM25 would have missed entirely.</p>
         <div class="code-block rounded-lg px-4 py-3 font-mono text-sm text-zinc-400 not-prose mb-4">
-          <p><span class="text-zinc-600">$</span> cruxhive search "91.99.212.250"</p>
+          <p><span class="text-zinc-600">$</span> cruxhive search "203.0.113.10"</p>
           <p class="text-zinc-500 text-xs mt-1 ml-4">→ Returns entries mentioning that IP even though FTS5 doesn't tokenize it.</p>
         </div>
 

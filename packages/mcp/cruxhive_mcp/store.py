@@ -517,7 +517,7 @@ def rrf_fuse(
         entity_hits = _entity_boost_paths(conn, query) if query else {}
 
         # Pull entity-only matches in as new candidates if BM25/vec missed them.
-        # This lets a query like "91.99.212.250" surface entries about that IP
+        # This lets a query like "203.0.113.10" surface entries about that IP
         # even if the literal token wasn't tokenized by FTS5.
         missing = [p for p in entity_hits if p not in by_path]
         if missing:
