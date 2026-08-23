@@ -1281,6 +1281,11 @@ import re as _re
 _SECRET_FILE_RX = _re.compile(
     r"\.env(\.|\b)|id_rsa|\.pem\b|\.key\b|credentials|\.npmrc|"
     r"\.pypirc|secrets?\.(ya?ml|json|toml)", _re.I)
+# Files that look like secrets but are safe version manifests or known
+# non-secret config. Matched against the stripped command BEFORE _SECRET_FILE_RX.
+# Add paths here when the guardrail fires a confirmed false-positive.
+_SECRET_FILE_WHITELIST_RX = _re.compile(
+    r"config/release\.env\b", _re.I)
 _MAIN_REF_RX = _re.compile(
     r"(?:^|\s)(?:\S*?:)?(?:refs/heads/)?(?:main|master)(?=\s|$)", _re.I)
 
@@ -1318,13 +1323,33 @@ _MSG_STRIP_RX = [
     _re.compile(r"--message\s*=?\s*'[^']*'", _re.I),
     _re.compile(r"-[a-z]*m(?:\s+|=)\S+", _re.I),
     _re.compile(r"--message(?:\s+|=)\S+", _re.I),
+    # Heredoc bodies: `git commit -F - <<'EOF' ... EOF`. Agents write long
+    # commit messages this way, and those messages routinely discuss branches,
+    # secrets and migrations — the exact words these rules match on. Text
+    # inside a heredoc is DATA, never a command, so stripping it cannot create
+    # a bypass: anything after the closing delimiter is still matched.
+    # NB: keep the opener LINE, strip only the body. A heredoc body begins on
+    # the next line, so the remainder of the opener line is still live command
+    # — `... <<'EOF' && git push --force origin main` must stay matchable.
+    # Stripping from the `<<` marker would swallow it and create a bypass.
+    (_re.compile(r"(<<-?\s*(['\"]?)(\w+)\2[^\n]*\n).*?^\s*\3\s*$",
+                 _re.S | _re.M), r"\1"),
 ]
 
 
 def _strip_commit_message(cmd: str) -> str:
+    """Remove commit-message text so rules match commands, not prose.
+
+    Entries are either a bare regex (replaced with a space) or a
+    (regex, replacement) pair when part of the match must be preserved.
+    """
     out = cmd
-    for rx in _MSG_STRIP_RX:
-        out = rx.sub(" ", out)
+    for entry in _MSG_STRIP_RX:
+        if isinstance(entry, tuple):
+            rx, repl = entry
+            out = rx.sub(repl, out)
+        else:
+            out = entry.sub(" ", out)
     return out
 
 
@@ -1347,8 +1372,23 @@ def _guardrail_bash(cmd: str, extra_bash=()) -> tuple[str | None, str | None]:
     """Evaluate a Bash command. Returns (block_msg, warn_msg); pure/testable."""
     stripped = _strip_commit_message(cmd)
     for label, trig, targ, msg in _BASH_DENY:
-        target = stripped if label == "secrets-hygiene" else cmd
+        # Match the TARGET against the command with commit-message bodies
+        # removed, for every rule — not just secrets-hygiene.
+        #
+        # The ref matcher anchors main/master as a refspec, which is correct,
+        # but it was reading the raw command including heredoc commit bodies.
+        # So `git commit -F - <<EOF ... landed on main ... EOF && git push
+        # --force-with-lease` blocked: the word "main" in the MESSAGE was read
+        # as a push target. Observed twice on 2026-08-23, both times on a
+        # feature branch, both times because the commit message discussed main.
+        # The trigger still matches the raw command — we only narrow what
+        # counts as the target.
+        target = stripped
         if trig.search(cmd) and targ.search(target):
+            # Allow whitelisted paths that match the secrets pattern but are
+            # known version manifests or non-secret config (e.g. config/release.env).
+            if label == "secrets-hygiene" and _SECRET_FILE_WHITELIST_RX.search(target):
+                continue
             return msg, None
     for trig, targ, msg in extra_bash:
         if trig.search(cmd) and targ.search(cmd):

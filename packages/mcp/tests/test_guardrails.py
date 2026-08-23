@@ -49,6 +49,34 @@ def test_force_push_to_branch_named_like_main_not_blocked():
     assert not _blocked("git push --force origin domain")
 
 
+def test_commit_message_mentioning_the_branch_does_not_block_a_feature_push():
+    """The ref matcher must read the COMMAND, not the commit message body.
+
+    Observed 2026-08-23: a force-push on a feature branch was blocked twice
+    because the heredoc commit message said "landed on main". The word was
+    matched as a push refspec. `_strip_commit_message` already existed for
+    secrets-hygiene; it now applies to every rule.
+    """
+    cmd = (
+        "git add x && git commit -F - <<'EOF' && git push --force-with-lease\n"
+        "style: strip trailing whitespace\n\n"
+        "The file landed on main via #144 with the whitespace intact.\n"
+        "EOF"
+    )
+    assert not _blocked(cmd)
+
+
+def test_force_push_to_main_still_blocked_alongside_a_commit_message():
+    """Narrowing the target must not create a bypass: a real force-push to
+    main is still caught even when a commit message is present."""
+    cmd = (
+        "git commit -F - <<'EOF' && git push --force origin main\n"
+        "some message\n"
+        "EOF"
+    )
+    assert _blocked(cmd)
+
+
 def test_non_force_push_to_main_not_blocked():
     assert not _blocked("git push origin main")
 
