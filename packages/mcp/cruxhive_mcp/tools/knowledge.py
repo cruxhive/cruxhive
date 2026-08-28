@@ -34,7 +34,17 @@ def register(mcp: FastMCP) -> None:
             embedder = _embedder
         try:
             count = _store.index(root, embedder=embedder)
-            vec_note = " (+ vector embeddings)" if embedder else ""
+            # Report what was actually written. This used to say "(+ vectors)"
+            # whenever an embedder object existed, and printed it over 0 stored
+            # rows for months while sqlite-vec silently failed to load.
+            wrote = _store.last_index_stats.get("vectors", 0)
+            if wrote:
+                vec_note = f" (+ {wrote} vectors)"
+            elif embedder:
+                why = _store.vec_unavailable_reason or "unknown reason"
+                vec_note = f" — NO vectors stored: {why}"
+            else:
+                vec_note = " — lexical only (no embedder)"
             return f"Indexed {count} file(s){vec_note} → .llm/cruxhive.db"
         except Exception as e:
             return f"Error indexing: {e}"

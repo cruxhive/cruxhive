@@ -26,6 +26,11 @@ dependencies = [
 full = [
     "sentence-transformers>=2.7.0",
     "sqlite-vec>=0.1.6",
+    # nomic-embed-text-v1.5 is loaded with trust_remote_code=True and its
+    # modelling code imports einops. Without it SentenceTransformer raises,
+    # embedder._load() swallows it, and is_available() reports False — so
+    # installing [full] left semantic search silently off.
+    "einops>=0.7.0",
 ]
 ui = [
     # fastapi floor raised so it resolves against Starlette 1.x. Starlette is
