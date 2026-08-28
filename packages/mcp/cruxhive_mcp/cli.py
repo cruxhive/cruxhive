@@ -92,7 +92,17 @@ def index() -> None:
     embedder = _emb if _emb.is_available() else None
     try:
         n = _store.index(root, embedder=embedder)
-        vec = " (+ vectors)" if embedder else ""
+        # Report what was actually written, not that an embedder existed. The
+        # old message printed "(+ vectors)" over 0 stored rows for months while
+        # sqlite-vec silently failed to load under uv's managed interpreter.
+        wrote = _store.last_index_stats.get("vectors", 0)
+        if wrote:
+            vec = f" (+ {wrote} vectors)"
+        elif embedder:
+            why = _store.vec_unavailable_reason or "unknown reason"
+            vec = f"\n  \033[33m!\033[0m  NO vectors stored — {why}"
+        else:
+            vec = " — lexical only (no embedder)"
         print(f"  \033[32m✓\033[0m  Indexed {n} file(s){vec} → .llm/cruxhive.db")
     except Exception as e:
         print(f"  \033[31m✗\033[0m  {e}", file=sys.stderr)

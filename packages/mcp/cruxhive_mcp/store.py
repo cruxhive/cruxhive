@@ -131,14 +131,38 @@ def _migrate(conn: sqlite3.Connection) -> None:
             conn.rollback()
 
 
+#: Why the last sqlite-vec load failed, or None if it worked. Read by callers
+#: that want to explain a degraded index instead of pretending it is fine.
+vec_unavailable_reason: str | None = "not attempted"
+
+
 def _try_load_vec(conn: sqlite3.Connection) -> None:
+    """Load sqlite-vec, recording WHY if it cannot be loaded.
+
+    This used to swallow every failure. Two of them are common and neither is
+    visible: the package is missing, or the running interpreter was built
+    without SQLite loadable-extension support (uv's managed CPython is, which
+    silently reduced every store to lexical-only search).
+    """
+    global vec_unavailable_reason
     try:
         import sqlite_vec  # type: ignore[import]
+    except Exception as exc:
+        vec_unavailable_reason = f"sqlite-vec not installed ({exc})"
+        return
+    if not hasattr(conn, "enable_load_extension"):
+        vec_unavailable_reason = (
+            "this Python was built without SQLite loadable-extension support; "
+            "reinstall against an interpreter that has it"
+        )
+        return
+    try:
         conn.enable_load_extension(True)
         sqlite_vec.load(conn)
         conn.enable_load_extension(False)
-    except Exception:
-        pass
+        vec_unavailable_reason = None
+    except Exception as exc:
+        vec_unavailable_reason = f"sqlite-vec failed to load ({exc})"
 
 
 def _init_schema(conn: sqlite3.Connection) -> None:
@@ -285,6 +309,12 @@ def _ephemeral_expired(meta: dict) -> bool:
         return False
 
 
+#: Populated by index(): what the last run actually wrote. Callers should
+#: report vectors from here rather than inferring them from "an embedder
+#: object exists", which is how "(+ vectors)" got printed over 0 stored rows.
+last_index_stats: dict[str, int] = {"files": 0, "vectors": 0}
+
+
 def index(root: str, embedder=None) -> int:
     """Scan .llm/ tree + ~/.cruxhive/personal/ and upsert changed .md files.
 
@@ -295,6 +325,7 @@ def index(root: str, embedder=None) -> int:
     conn = connect(root)
     files = _scan_md_files(root)
     count = 0
+    vectors_written = 0
     for fpath, rel in files:
         mtime = fpath.stat().st_mtime
         row = conn.execute("SELECT mtime FROM entries WHERE path=?", (rel,)).fetchone()
@@ -319,7 +350,16 @@ def index(root: str, embedder=None) -> int:
         vec_bytes = None
         if embedder is not None:
             try:
-                embed_text = f"{meta.get('topic', '')} {body[:512]}"
+                # 512 chars is ~128 tokens against a model that accepts 8192,
+                # so most of an entry never reached its vector. The frontmatter
+                # description is the densest summary available, so lead with it.
+                embed_text = " ".join(
+                    x for x in (
+                        str(meta.get("topic", "") or ""),
+                        str(meta.get("description", "") or ""),
+                        body[:4000],
+                    ) if x
+                )
                 vec_bytes = embedder.encode_bytes(embed_text)
             except Exception:
                 pass
@@ -364,6 +404,7 @@ def index(root: str, embedder=None) -> int:
                     "INSERT OR REPLACE INTO entry_vecs(id, vec) VALUES (?,?)",
                     (row_id, vec_bytes),
                 )
+                vectors_written += 1
             except Exception:
                 pass
 
@@ -406,6 +447,7 @@ def index(root: str, embedder=None) -> int:
 
     conn.commit()
     conn.close()
+    last_index_stats.update(files=count, vectors=vectors_written)
     return count
 
 
