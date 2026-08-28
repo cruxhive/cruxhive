@@ -560,6 +560,11 @@ def _entity_boost_paths(conn: sqlite3.Connection, query: str) -> dict[str, int]:
     return {r["path"]: r["shared"] for r in rows}
 
 
+#: Multiplier applied to entries carrying a type or topic — ones somebody wrote
+#: on purpose — over untyped working documents. See rrf_fuse.
+CURATION_BOOST = 2.0
+
+
 def rrf_fuse(
     bm25: list[dict], vec: list[dict], k: int = 60,
     conn: sqlite3.Connection | None = None, query: str = "",
@@ -622,6 +627,25 @@ def rrf_fuse(
                     scores[p] += min(0.30, shared * 0.10)
                     item["_entity_match"] = shared
                 scores[p] += _recency_boost(mtimes.get(p))
+                # Curation boost. A store mixes deliberately-written entries
+                # (type/topic set) with working documents that merely happen to
+                # live under .llm/ — long plans, drafts, scratch notes. The
+                # working documents are longer, so they win on term counts and
+                # bury the entry that actually answers the question.
+                #
+                # Measured on a 20-question golden set against a 230-entry store
+                # where the right answer was retrieved every time but ranked 4th
+                # to 77th:
+                #   no boost     recall@3 45%  MRR 0.317
+                #   x2 curated   recall@3 65%  MRR 0.575
+                #   x4 curated   recall@3 65%  MRR 0.575  (no further gain)
+                # A length penalty was tried and made it worse (30%), so the
+                # signal is curation, not brevity.
+                #
+                # Tuned on 20 questions — re-measure with scripts/cruxhive-eval.py
+                # as that set grows before trusting the constant.
+                if item.get("type") or item.get("topic"):
+                    scores[p] *= CURATION_BOOST
 
     return [by_path[p] for p in sorted(scores, key=lambda x: -scores[x])]
 
