@@ -17,24 +17,51 @@ function info(msg) { console.log(`  \x1b[36m·\x1b[0m  ${msg}`); }
 function warn(msg) { console.log(`  \x1b[33m!\x1b[0m  ${msg}`); }
 function err(msg)  { console.log(`  \x1b[31m✗\x1b[0m  ${msg}`); }
 
-/** All *.md files under `dir`, as paths relative to `dir`. */
-function walkMdFiles(dir, base = dir) {
-  let out = [];
+/** Walk `dir` collecting *.md file paths (relative to `dir`), plus any path
+ * the walk could NOT confidently verify: an unreadable subdirectory
+ * (permission denied, etc.) or a symlink of any kind (file or directory).
+ *
+ * Both cases used to be silently dropped — an unreadable dir made
+ * readdirSync throw, caught and swallowed into an empty result for that
+ * subtree, and a symlinked .md file simply isn't isFile()/isDirectory()
+ * true (Dirent from withFileTypes uses lstat semantics), so it fell through
+ * every branch and vanished from the walk entirely. Either way the caller
+ * would report "all files match" without ever having looked — the opposite
+ * of this tool's contract. Surfacing both as `problems`, treated exactly
+ * like a divergent file by the caller, keeps the "never guess, refuse and
+ * name it" rule intact instead of silently proceeding past what wasn't
+ * actually checked. */
+function walkTree(dir, base = dir) {
+  const files = [];
+  const problems = [];
   let entries;
   try {
     entries = readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return out;
+  } catch (e) {
+    problems.push({
+      path: relative(base, dir) || ".",
+      reason: `unreadable directory (${e.code || e.message})`,
+    });
+    return { files, problems };
   }
   for (const e of entries) {
     const full = join(dir, e.name);
+    const relPath = relative(base, full);
+    if (e.isSymbolicLink()) {
+      // Don't try to cleverly resolve/compare through it — could point
+      // anywhere, including outside .llm/ or back through itself.
+      problems.push({ path: relPath, reason: "symlink — not verified" });
+      continue;
+    }
     if (e.isDirectory()) {
-      out = out.concat(walkMdFiles(full, base));
+      const sub = walkTree(full, base);
+      files.push(...sub.files);
+      problems.push(...sub.problems);
     } else if (e.isFile() && e.name.endsWith(".md")) {
-      out.push(relative(base, full));
+      files.push(relPath);
     }
   }
-  return out;
+  return { files, problems };
 }
 
 function filesIdentical(a, b) {
@@ -104,7 +131,7 @@ async function worktreeLink(args) {
   }
 
   // Compare every *.md file in this worktree's .llm/ against main's, byte-for-byte.
-  const localFiles = walkMdFiles(localLlm);
+  const { files: localFiles, problems: walkProblems } = walkTree(localLlm);
   const divergent = [];
   for (const rel of localFiles) {
     const localPath = join(localLlm, rel);
@@ -115,14 +142,21 @@ async function worktreeLink(args) {
   // Files that exist ONLY in this worktree are also divergent — main lacks
   // something this worktree has, so linking would silently discard it.
   const uniqueToWorktree = localFiles.filter((rel) => !existsSync(join(mainLlm, rel)));
-  const problems = [...new Set([...divergent, ...uniqueToWorktree])];
+
+  // Tag every problem path with why it's a problem — divergent/unique
+  // content, or something the walk couldn't even verify (unreadable dir,
+  // symlink). All three refuse the link the same way.
+  const tagFor = new Map();
+  for (const rel of uniqueToWorktree) tagFor.set(rel, "unique to this worktree");
+  for (const rel of divergent) tagFor.set(rel, "content differs");
+  for (const p of walkProblems) tagFor.set(p.path, p.reason);
+  const problems = [...tagFor.keys()];
 
   if (problems.length) {
-    err(`Refusing to link — ${problems.length} file(s) in this worktree's .llm/ `
-      + `differ from (or don't exist in) the main worktree's .llm/:\n`);
+    err(`Refusing to link — ${problems.length} file(s)/path(s) in this worktree's .llm/ `
+      + `differ from, don't exist in, or couldn't be verified against the main worktree's .llm/:\n`);
     for (const p of problems) {
-      const tag = uniqueToWorktree.includes(p) && !divergent.includes(p) ? "unique to this worktree" : "content differs";
-      console.log(`    - ${p}  \x1b[90m(${tag})\x1b[0m`);
+      console.log(`    - ${p}  \x1b[90m(${tagFor.get(p)})\x1b[0m`);
     }
     console.log(`\n  Nothing was changed. Reconcile these manually (copy anything`);
     console.log(`  worth keeping into the main worktree's .llm/), then re-run.\n`);
