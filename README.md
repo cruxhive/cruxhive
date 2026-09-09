@@ -42,6 +42,13 @@ Wire into any MCP client — add to `.mcp.json`:
 
 If you're an AI agent asked to set this up in a project, run this sequence — don't skip the verification steps, and don't guess at commands that aren't listed here.
 
+**Claude Code users:** get this as a real Skill instead of relying on your agent to read and follow this section correctly — it auto-loads and triggers on "set up cruxhive" without needing to fetch this page first:
+```bash
+curl --create-dirs -o ~/.claude/skills/install-cruxhive/SKILL.md \
+  https://raw.githubusercontent.com/cruxhive/cruxhive/main/skills/install-cruxhive/SKILL.md
+```
+Installed once, globally — works from any project afterward.
+
 1. **Check prerequisites.** `node --version` (need 18+) and `uv --version` (need `uv`; if missing: `curl -LsSf https://astral.sh/uv/install.sh | sh`).
 2. **Install globally, not via `npx`:** `npm install -g @cruxhive/cli`. This matters — `npx` doesn't leave `cruxhive` on PATH, so every command after this one would fail with `command not found` unless you re-prefix each one with `npx @cruxhive/cli`.
 3. **Verify the install before continuing:** `cruxhive --help` should print usage, not an error. If it doesn't, stop and report the actual error — don't fall back to guessing at differently-named commands (in particular, the hyphenated `cruxhive-*` Python entry points that `init` installs are *not* a drop-in replacement for every `cruxhive` subcommand — `cruxhive review`'s interactive/bulk approval flow, for one, only exists in the `cruxhive` CLI itself).
