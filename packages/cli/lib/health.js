@@ -76,6 +76,7 @@ async function health(_args) {
   const plansDir = join(cwd, ".llm", "plans");
   const memoryDir = join(cwd, ".llm", "memory");
   const contextDir = join(cwd, ".llm", "context");
+  const pendingDir = join(cwd, ".llm", "pending");
 
   const planCount = countFiles(plansDir) - (existsSync(join(plansDir, "active.md")) ? 1 : 0);
   const memCount = countFiles(memoryDir);
@@ -109,6 +110,11 @@ async function health(_args) {
   scanDir(memoryDir);
   scanDir(contextDir);
   scanDir(plansDir);
+  // .llm/pending/ is where real ai-proposed, unapproved entries actually
+  // live (see cli.py's propose()) — without scanning it, isPendingApproval()
+  // could never find anything to count and pendingCount stayed 0 regardless
+  // of real queue state.
+  scanDir(pendingDir);
 
   // Output
   fmt("CONTEXT.md", `${badge(contextExists)} ${contextExists ? "present" : "missing"}`,

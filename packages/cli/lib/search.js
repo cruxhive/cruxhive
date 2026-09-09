@@ -14,12 +14,40 @@ function formatResult(r, i, workspaceMode) {
   return `  ${num} ${project}${r.path}  \x1b[90m[${type}]\x1b[0m  ${snippet}${entityTag}`;
 }
 
+/** Split --json out of argv without corrupting a query/positional that
+ * happens to literally be the string "--json" (a blind `.filter(a => a !==
+ * "--json")` stripped EVERY matching token regardless of position, so
+ * `cruxhive search "--json" 5` silently dropped the query and only sent
+ * `5` to the underlying binary).
+ *
+ * cruxhive-search's own signature is `[--workspace|-w] <query> [n]` — query
+ * is the first token that isn't --workspace/-w, and --json doesn't exist to
+ * the Python binary at all (it's JS-only). So: --workspace/-w always pass
+ * through untouched, wherever they appear (matches the binary's own
+ * position-agnostic handling of those two). The query slot is always filled
+ * by the first non-workspace token, even if that token is literally
+ * "--json" — only a LATER "--json" (after the query slot is filled) is our
+ * own flag, and that's the only one stripped.
+ */
+function splitArgs(argv) {
+  let querySeen = false;
+  let jsonMode = false;
+  const passthrough = [];
+  for (const a of argv) {
+    const isWorkspaceFlag = a === "--workspace" || a === "-w";
+    if (a === "--json" && querySeen) {
+      jsonMode = true;
+      continue;
+    }
+    if (!isWorkspaceFlag) querySeen = true;
+    passthrough.push(a);
+  }
+  return { jsonMode, passthrough };
+}
+
 async function search(args) {
   const argv = Array.isArray(args) ? args : [];
-  const jsonMode = argv.includes("--json");
-  // cruxhive-search (the Python binary) doesn't know about --json — it's a
-  // JS-CLI-only flag, so strip it before passing args through.
-  const passthrough = argv.filter((a) => a !== "--json");
+  const { jsonMode, passthrough } = splitArgs(argv);
   const workspaceMode = passthrough.includes("--workspace") || passthrough.includes("-w");
 
   const r = spawnSync("cruxhive-search", passthrough, { stdio: ["ignore", "pipe", "pipe"] });

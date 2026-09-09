@@ -110,7 +110,14 @@ if (!fn) {
 // Generic per-command `--help`/`-h` intercept: no command function parses
 // this itself, so without this every command (propose most visibly) treated
 // --help as ordinary args and ran for real instead of showing usage.
-if (args.includes("--help") || args.includes("-h")) {
+//
+// Only args[0] (immediately after the command name) counts. Every real
+// invocation puts --help/-h first (`cruxhive propose --help`, etc.) — an
+// argv-wide `.includes()` check instead matched a FLAG'S OWN VALUE anywhere
+// in argv (e.g. `cruxhive propose --content "--help"`), silently no-op'ing
+// the real command (printing help, exit 0) instead of running it. A flag's
+// value is never at position 0, so anchoring here eliminates that case.
+if (args[0] === "--help" || args[0] === "-h") {
   console.log(`\ncruxhive ${cmd} — ${COMMAND_HELP[cmd] || "(no additional help available)"}\n`);
   process.exit(0);
 }
