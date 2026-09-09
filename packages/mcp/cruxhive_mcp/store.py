@@ -224,7 +224,11 @@ def _init_schema(conn: sqlite3.Connection) -> None:
 
 # ── Indexing ──────────────────────────────────────────────────────────────────
 
-PERSONAL_ROOT = Path.home() / ".cruxhive" / "personal"
+def _personal_root() -> Path:
+    # Resolved per-call, not cached at import time, so tests that monkeypatch
+    # HOME (see tests/conftest.py::isolated_home) actually get an isolated
+    # personal tier instead of silently reading the real ~/.cruxhive/personal/.
+    return Path.home() / ".cruxhive" / "personal"
 
 
 def _scan_dir(base: Path) -> list[Path]:
@@ -254,9 +258,10 @@ def _scan_md_files(root: str) -> list[tuple[Path, str]]:
             continue
         result.append((f, str(f.relative_to(root))))
     # Also include personal layer — visible from every project
-    if PERSONAL_ROOT.exists():
-        for f in _scan_dir(PERSONAL_ROOT):
-            rel = f.relative_to(PERSONAL_ROOT).as_posix()
+    personal_root = _personal_root()
+    if personal_root.exists():
+        for f in _scan_dir(personal_root):
+            rel = f.relative_to(personal_root).as_posix()
             result.append((f, f"personal:{rel}"))
     return result
 
@@ -434,7 +439,7 @@ def index(root: str, embedder=None) -> int:
     # layer that was not walked on this pass is never pruned.
     scanned = {rel for _fp, rel in files}
     prefixes = [".llm/"]
-    if PERSONAL_ROOT.exists():
+    if _personal_root().exists():
         prefixes.append("personal:")
     for row in conn.execute("SELECT path FROM entries").fetchall():
         rel = row["path"]

@@ -409,7 +409,7 @@ def digest() -> None:
             clients = g["clients"] or "?"
             out.append(f"{i}. **{g['query']}** — searched {g['times']}× by {clients}")
         out.append("")
-        out.append("→ Use `/propose` (or `cruxhive propose`) to capture entries for these.\n")
+        out.append("→ Use `/extract` (or `cruxhive propose`) to capture entries for these.\n")
     else:
         out.append(f"## Top knowledge gaps\n_None — every recent search found something._\n")
 
@@ -615,7 +615,7 @@ def doctor() -> None:
         warn(".gitignore missing — index/log will land in git unless added")
 
     # Slash commands / custom skills
-    expected = {"radar", "next-slice", "review", "propose", "write-plan", "extract"}
+    expected = {"radar", "next-slice", "review", "write-plan", "extract"}
     for dialect_dir, dialect_name in [
         (".claude/commands", "Claude Code"),
         (".opencode/commands", "OpenCode"),

@@ -427,10 +427,10 @@
             <tr><td><code>/radar [days]</code></td><td>Scan recent commits, map to plan areas, surface work with no plan</td><td><code>context_radar</code></td></tr>
             <tr><td><code>/next-slice [area]</code></td><td>Find first unblocked work item from active plan</td><td><code>context_next_slice</code></td></tr>
             <tr><td><code>/review</code></td><td>List CruxHive proposals awaiting approval</td><td><code>context_review</code></td></tr>
-            <tr><td><code>/propose</code></td><td>Interactive: capture a new knowledge entry</td><td><code>context_propose</code></td></tr>
             <tr><td><code>/write-plan</code></td><td>Draft a new plan file under <code>.llm/plans/</code></td><td><code>context_write_plan</code></td></tr>
-            <tr><td><code>/extract</code></td><td>Distill the current session into <strong>N candidate entries</strong> — dedup, classify, present numbered list for user to pick from, queue selected for review</td><td><code>context_search</code> + <code>context_propose</code></td></tr>
-            <tr><td><code>/summarize</code></td><td>Distill the current session into <strong>one</strong> structured research entry (Background / Done / Decisions / Open questions / Next steps). Lower-friction counterpart to <code>/extract</code>.</td><td><code>context_search</code> + <code>context_propose</code></td></tr>
+            <tr><td><code>/extract</code></td><td>Sweep mode (default): distill the current session into <strong>N candidate entries</strong> — dedup, classify, present numbered list for user to pick from, queue selected for review</td><td><code>context_search</code> + <code>context_propose</code></td></tr>
+            <tr><td><code>/extract &lt;fact&gt;</code></td><td>Single-entry mode: file one inline fact or decision directly, skipping the session sweep</td><td><code>context_propose</code></td></tr>
+            <tr><td><code>/extract --summary</code></td><td>Session-summary mode: distill the session into <strong>one</strong> structured research entry (Background / Done / Decisions / Open questions / Next steps) instead of N candidates</td><td><code>context_search</code> + <code>context_propose</code></td></tr>
           </tbody>
         </table>
 

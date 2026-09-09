@@ -19,3 +19,5 @@ cp "$SRC" "$DST"
 src_bytes=$(wc -c < "$SRC" | tr -d ' ')
 dst_bytes=$(wc -c < "$DST" | tr -d ' ')
 echo "✓ Synced docs/guide.html → packages/mcp/cruxhive_mcp/static/guide.html ($dst_bytes bytes)"
+
+"${ROOT}/scripts/stamp-version.sh"

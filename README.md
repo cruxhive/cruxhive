@@ -5,7 +5,7 @@
 > Your coding AI forgets everything between sessions. Your teammates' AIs forget everything too. CruxHive fixes that — with a human approval gate, hybrid semantic search, and a knowledge base that compounds over time.
 
 ```bash
-npx cruxhive init
+npx @cruxhive/cli init
 ```
 
 One human-curated knowledge base. Every AI tool reads from it — Claude Code, OpenCode, Cursor, Windsurf, Gemini CLI. Local SQLite, MIT licensed, zero cloud dependency.
@@ -16,7 +16,7 @@ One human-curated knowledge base. Every AI tool reads from it — Claude Code, O
 
 ```bash
 # One command — installs the MCP server (via uv) and wires up your project
-npx cruxhive init
+npx @cruxhive/cli init
 ```
 
 Or install the engine directly:
@@ -61,6 +61,8 @@ workspace   Cross-project rollup — aggregate KPIs across all projects
 direnv      Write a .envrc that auto-logs sessions for Cursor/Windsurf/Gemini
 solo        Enable/disable solo mode — auto-approve your own proposals
 ui          Open the approval-queue dashboard (localhost:3847)
+skills      Sync a canonical skills dir to every AI-tool dialect
+            (cruxhive skills sync [--from <dir>], default source .llm/skills/)
 ```
 
 ## MCP tools

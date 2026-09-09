@@ -39,11 +39,24 @@ def no_analytics(monkeypatch):
     monkeypatch.setenv("CRUXHIVE_ANALYTICS", "0")
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def isolated_home(tmp_path, monkeypatch):
-    """Redirect HOME so the personal layer doesn't pollute the user's machine."""
+    """Redirect HOME so the personal layer doesn't pollute the user's machine.
+
+    Autouse: store._personal_root() is resolved from Path.home() on every
+    call (not cached), so this is enough to isolate it — but without
+    autouse, a test's exact-match assertion only fails on a machine that
+    already has a real ~/.cruxhive/personal/ (silently green in CI, silently
+    red on a real dev machine). Applies to every test, not just ones that
+    opt in, since any test with an exact-match assertion is at risk.
+
+    Deliberately does NOT mkdir fake_home: several tests create
+    tmp_path/"_home" themselves (directly or via `project`, which is
+    tmp_path) before writing under it — pre-creating it here would collide
+    with their own `.mkdir()`. Path.home() doesn't require the path to
+    exist, and store._personal_root().exists() already treats a missing
+    personal tier as "nothing to scan", which is exactly what we want here.
+    """
     fake_home = tmp_path / "_home"
-    fake_home.mkdir()
     monkeypatch.setenv("HOME", str(fake_home))
-    # Some libs read Path.home(), which uses pwd not HOME on macOS. Reload module.
     return fake_home
