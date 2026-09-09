@@ -63,3 +63,46 @@ def test_filtering_failure_never_blocks_the_prompt(project):
     hits = _candidates(conn, query)
     conn.close()  # a closed connection makes the lookup raise
     assert cli._relevance_floor(conn, hits, query) == hits
+
+
+# ── Pending-queue nudge ────────────────────────────────────────────────────────
+
+def _run_inject(project, prompt, capsys, monkeypatch):
+    import io
+    import json
+
+    payload = json.dumps({"prompt": prompt, "cwd": str(project)})
+    monkeypatch.setattr("sys.stdin", io.StringIO(payload))
+    cli.inject()
+    return capsys.readouterr().out
+
+
+def _seed_pending(project, n):
+    for i in range(n):
+        _write(
+            project / ".llm" / "pending" / f"fact_pending-{i}.md",
+            f"---\ntype: fact\ntopic: pending-{i}\nvalid_at: 2026-05-29\n"
+            "confidence: medium\nsource: ai-proposed\napproved_by: ~\n---\n\n"
+            f"Pending claim number {i}.\n",
+        )
+
+
+def test_nudge_appears_when_pending_at_least_three(project, capsys, monkeypatch):
+    conn = _seeded(project)
+    conn.close()
+    _seed_pending(project, 3)
+    store.index(str(project))
+
+    out = _run_inject(project, "rollback gates before a production change", capsys, monkeypatch)
+    assert "3 proposals pending your review" in out
+    assert "cruxhive review" in out
+
+
+def test_nudge_absent_when_pending_below_three(project, capsys, monkeypatch):
+    conn = _seeded(project)
+    conn.close()
+    _seed_pending(project, 2)
+    store.index(str(project))
+
+    out = _run_inject(project, "rollback gates before a production change", capsys, monkeypatch)
+    assert "pending your review" not in out

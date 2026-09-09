@@ -24,7 +24,12 @@ dependencies = [
     # module. 2026-08-29: an unbounded ">=1.0.0" let a routine reinstall pull
     # 2.1.1 and the MCP server died with ModuleNotFoundError at import time.
     # Raise this only together with the MCPServer migration.
-    "mcp>=1.0.0,<2",
+    #
+    # Floor raised to 1.28.1: fixes three security advisories on the 1.x
+    # branch (websocket transport Host/Origin validation gap, HTTP transport
+    # session/principal check gap, experimental task isolation gap) without
+    # needing the 2.x MCPServer migration.
+    "mcp>=1.28.1,<2",
 ]
 
 [project.optional-dependencies]
@@ -50,7 +55,8 @@ ui = [
     # vulnerable bundled OpenSSL) so end-user resolves get patched versions,
     # not just our lockfile.
     "python-multipart>=0.0.32",
-    "cryptography>=49.0.0",
+    # >=50.0.0 fixes a PKCS#7 Bleichenbacher-oracle advisory.
+    "cryptography>=50.0.0",
 ]
 dev = [
     "pytest>=8.0.0",

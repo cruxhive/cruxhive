@@ -569,6 +569,12 @@ def _entity_boost_paths(conn: sqlite3.Connection, query: str) -> dict[str, int]:
 #: on purpose — over untyped working documents. See rrf_fuse.
 CURATION_BOOST = 2.0
 
+#: Multiplier applied to a fused score by the entry's *effective* (decayed)
+#: confidence band, so decay affects ranking, not just display. Pure
+#: re-ranking — nothing is filtered out, a low-confidence entry still shows
+#: up, just lower. See rrf_fuse and effective_confidence.
+_CONFIDENCE_WEIGHT = {"high": 1.0, "medium": 0.7, "low": 0.4}
+
 
 def rrf_fuse(
     bm25: list[dict], vec: list[dict], k: int = 60,
@@ -617,21 +623,30 @@ def rrf_fuse(
                 # rank but the entry shows up at all.
                 scores[p] = scores.get(p, 0.0) + 1.0 / (k + 200)
 
-        # Pull mtimes for all candidate paths in one query
+        # Pull mtimes + confidence/valid_at for all candidate paths in one query
         paths = list(by_path.keys())
         if paths:
             ph2 = ",".join("?" * len(paths))
             mtime_rows = conn.execute(
-                f"SELECT path, mtime FROM entries WHERE path IN ({ph2})",
+                f"SELECT path, mtime, confidence, valid_at FROM entries WHERE path IN ({ph2})",
                 tuple(paths),
             ).fetchall()
             mtimes = {r["path"]: r["mtime"] for r in mtime_rows}
+            conf_info = {r["path"]: (r["confidence"], r["valid_at"]) for r in mtime_rows}
             for p, item in by_path.items():
                 shared = entity_hits.get(p, 0)
                 if shared:
                     scores[p] += min(0.30, shared * 0.10)
                     item["_entity_match"] = shared
                 scores[p] += _recency_boost(mtimes.get(p))
+                # Decay-weighted ranking: a fresh high-confidence entry should
+                # outrank a stale one even when BM25/entity/recency scores tie.
+                # effective_confidence() already drives *display* (dimming a
+                # decayed entry in context_search); this is the same signal
+                # entering the fused score itself so it also affects order.
+                stored_conf, valid_at = conf_info.get(p, (None, None))
+                eff_conf, _age = effective_confidence(stored_conf, valid_at, mtimes.get(p))
+                scores[p] *= _CONFIDENCE_WEIGHT.get(eff_conf, 1.0)
                 # Curation boost. A store mixes deliberately-written entries
                 # (type/topic set) with working documents that merely happen to
                 # live under .llm/ — long plans, drafts, scratch notes. The
@@ -763,6 +778,25 @@ def approve(conn: sqlite3.Connection, path: str, approver: str, root: str) -> bo
     )
     conn.commit()
     return True
+
+
+def approve_all(
+    conn: sqlite3.Connection, approver: str, root: str,
+    paths: list[str] | None = None,
+) -> list[str]:
+    """Approve every pending entry, or only `paths` if given.
+
+    Loops list_pending() so callers don't have to know the pending set ahead
+    of time. Returns the list of paths actually approved (skips any path in
+    `paths` that isn't currently pending).
+    """
+    pending_paths = {p["path"] for p in list_pending(conn)}
+    targets = pending_paths if paths is None else [p for p in paths if p in pending_paths]
+    approved: list[str] = []
+    for path in targets:
+        if approve(conn, path, approver, root):
+            approved.append(path)
+    return approved
 
 
 def reject(conn: sqlite3.Connection, path: str, root: str) -> bool:

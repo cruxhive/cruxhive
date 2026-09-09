@@ -16,10 +16,14 @@ const { workspace } = require("../lib/workspace");
 const { direnv }    = require("../lib/direnv");
 const { solo }      = require("../lib/solo");
 const { skills }    = require("../lib/skills");
+const { worktreeLink } = require("../lib/worktree-link");
 
 const [, , cmd, ...args] = process.argv;
 
-const commands = { init, sync, health, ui, index, propose, review, stats, digest, status, doctor, workspace, direnv, solo, skills };
+const commands = {
+  init, sync, health, ui, index, propose, review, stats, digest, status, doctor,
+  workspace, direnv, solo, skills, "worktree-link": worktreeLink,
+};
 
 if (!cmd || cmd === "--help" || cmd === "-h") {
   console.log(`cruxhive v${require("../package.json").version}
@@ -31,6 +35,8 @@ Commands:
   index     Index .llm/ markdown files into the local knowledge base
   propose   Propose a new knowledge entry for human review
   review    Interactively approve or reject pending proposals
+            [--all] approve every pending item · [--all-safe] approve only
+            non-conflicting items (no reconcile verdict), non-interactively
   sync      Sync org-layer context from the configured remote
   health    Show knowledge base health summary
   stats     Usage observability — searches, hit rate, gaps, by AI tool
@@ -45,6 +51,9 @@ Commands:
             Run with --status to check current mode, --disable to turn off
   ui        Open the approval queue dashboard (localhost:3847)
             Add --workspace to see cross-project rollup view
+  worktree-link  Relink a git worktree's diverged .llm/ to the main worktree's
+            shared knowledge base (safe only if nothing would be lost).
+            Add --dry-run to preview without changing anything.
 
 Options:
   --help    Show this help message

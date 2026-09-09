@@ -1226,6 +1226,10 @@ def inject() -> None:
         bm25 = _store.search_bm25(conn, prompt, 8)
         hits = _store.rrf_fuse(bm25, [], conn=conn, query=prompt)[:6]
         hits = _relevance_floor(conn, hits, prompt)
+        try:
+            pending_n = _store.stats(conn)["pending"]
+        except Exception:
+            pending_n = 0
         conn.close()
     except Exception:
         return
@@ -1268,6 +1272,10 @@ def inject() -> None:
     ]
     for typ, label, path, snippet in picked:
         lines.append(f"• [{typ}] {label} ({path}): {snippet}")
+    if pending_n >= 3:
+        lines.append(
+            f"\n{pending_n} proposals pending your review — run `cruxhive review`."
+        )
     lines.append("</cruxhive-knowledge>")
     print("\n".join(lines))
 
