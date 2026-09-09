@@ -5,7 +5,7 @@
 > Your coding AI forgets everything between sessions. Your teammates' AIs forget everything too. CruxHive fixes that — with a human approval gate, hybrid semantic search, and a knowledge base that compounds over time.
 
 ```bash
-npx @cruxhive/cli init
+npm install -g @cruxhive/cli && cruxhive init
 ```
 
 One human-curated knowledge base. Every AI tool reads from it — Claude Code, OpenCode, Cursor, Windsurf, Gemini CLI. Local SQLite, MIT licensed, zero cloud dependency.
@@ -15,9 +15,13 @@ One human-curated knowledge base. Every AI tool reads from it — Claude Code, O
 ## Install
 
 ```bash
-# One command — installs the MCP server (via uv) and wires up your project
-npx @cruxhive/cli init
+npm install -g @cruxhive/cli
+cruxhive init
 ```
+
+`npm install -g` leaves `cruxhive` on PATH, so every command below (`cruxhive review`, `cruxhive ui`, ...) works from any project directory afterward. `init` itself installs the MCP server (via `uv`) and wires up the current project.
+
+Prefer a one-off, no-install run? `npx @cruxhive/cli init` also works — `init` will detect that `cruxhive` isn't left on PATH afterward and print the exact `npx @cruxhive/cli <command>` form to use instead of the short form shown throughout this README.
 
 Or install the engine directly:
 
@@ -33,6 +37,25 @@ Wire into any MCP client — add to `.mcp.json`:
   }
 }
 ```
+
+## Installing this for a user (for AI coding agents)
+
+If you're an AI agent asked to set this up in a project, run this sequence — don't skip the verification steps, and don't guess at commands that aren't listed here.
+
+1. **Check prerequisites.** `node --version` (need 18+) and `uv --version` (need `uv`; if missing: `curl -LsSf https://astral.sh/uv/install.sh | sh`).
+2. **Install globally, not via `npx`:** `npm install -g @cruxhive/cli`. This matters — `npx` doesn't leave `cruxhive` on PATH, so every command after this one would fail with `command not found` unless you re-prefix each one with `npx @cruxhive/cli`.
+3. **Verify the install before continuing:** `cruxhive --help` should print usage, not an error. If it doesn't, stop and report the actual error — don't fall back to guessing at differently-named commands (in particular, the hyphenated `cruxhive-*` Python entry points that `init` installs are *not* a drop-in replacement for every `cruxhive` subcommand — `cruxhive review`'s interactive/bulk approval flow, for one, only exists in the `cruxhive` CLI itself).
+4. **Initialize, from the project's git root:** `cruxhive init`.
+5. **Confirm it's healthy:** `cruxhive doctor` — should report no failures.
+6. **Describe the project:** edit `.llm/CONTEXT.md` with a few sentences on what this project is, its stack, and its conventions. This is what makes retrieval useful — don't skip it or leave the placeholder text.
+7. **Build the index:** `cruxhive index`.
+8. **Prove the loop actually works before telling the user it's done** — this is the whole point of the tool, so confirm it rather than assuming:
+   - Propose one real fact you've learned about the project so far (via the `context_propose` MCP tool if your client already sees it, otherwise `cruxhive propose` interactively).
+   - Confirm it's **not** yet retrievable: search for it (`context_search` / `cruxhive search "<topic>"`) and confirm it does **not** come back. This is the approval gate working correctly, not a bug — don't "fix" it.
+   - Tell the user it's waiting: *"N proposal(s) pending your review — run `cruxhive review` to approve or reject."* **Do not approve it yourself** unless the user has explicitly told you they've enabled `cruxhive solo --enable` (single-approver projects only). Approval is meant to be a human action; this is the core guarantee the tool exists to provide, and silently bypassing it defeats the point of installing it.
+9. **Report back to the user** what got installed, where `.llm/` lives, and that a human needs to run `cruxhive review` (or `cruxhive ui` for a browser dashboard) to start approving what gets learned.
+
+If any step fails, run `cruxhive doctor` and report its exact output rather than retrying blindly or silently skipping ahead.
 
 ## How it works
 

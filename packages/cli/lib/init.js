@@ -63,6 +63,20 @@ function hasBin(name) {
   return spawnSync(name, ["--version"], { stdio: "pipe" }).status === 0;
 }
 
+// `cruxhive` has no --version flag (unknown args exit 1), so hasBin() would
+// misreport it as absent even when installed — use --help, which exits 0.
+// Needed because `npx @cruxhive/cli init` (the README's other install path)
+// doesn't leave `cruxhive` on PATH afterward: commands printed in the
+// next-steps banner below would 127 unless we detect that and fall back to
+// re-prefixing with npx. The fallback must be `npx @cruxhive/cli <cmd>`, not
+// the hyphenated cruxhive-<cmd> Python entry points — those aren't
+// equivalent for every command (e.g. cruxhive-review just dumps pending
+// JSON for this file to consume; the real interactive/bulk review flow only
+// exists here in the JS CLI).
+function hasCruxhiveOnPath() {
+  return spawnSync("cruxhive", ["--help"], { stdio: "ignore" }).status === 0;
+}
+
 // ─── install cruxhive-mcp ──────────────────────────────────────────────────
 
 function installMcp() {
@@ -935,14 +949,22 @@ async function init(_args) {
   step("8/8  Automation hooks");
   wireAutomationHooks(cwd);
 
+  const onPath = hasCruxhiveOnPath();
+  const cx = onPath ? "cruxhive" : "npx @cruxhive/cli";
+  const pathNote = onPath ? "" : `
+\x1b[33m!\x1b[0m  \x1b[36mcruxhive\x1b[0m isn't on PATH (this ran via npx, which doesn't install it).
+   Every command below needs the \x1b[36mnpx @cruxhive/cli\x1b[0m prefix shown, or run
+   \x1b[36mnpm install -g @cruxhive/cli\x1b[0m once to use the short form from now on.
+`;
+
   console.log(`
 \x1b[32m✓ CruxHive initialized in ${projectName}\x1b[0m
-
+${pathNote}
 Next steps:
   1. Edit \x1b[36m.llm/CONTEXT.md\x1b[0m — describe your project, stack, and conventions
-  2. Run \x1b[36mcruxhive index\x1b[0m to build the search index
+  2. Run \x1b[36m${cx} index\x1b[0m to build the search index
   3. Reload your AI tool — MCP tools are now available
-  4. Working solo? \x1b[36mcruxhive solo --enable\x1b[0m skips the approval queue.
+  4. Working solo? \x1b[36m${cx} solo --enable\x1b[0m skips the approval queue.
 
 Docs: https://cruxhive.com/guide.html
 `);
