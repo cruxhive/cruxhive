@@ -4,7 +4,7 @@
 
 CruxHive is a team AI knowledge governance layer. One human-curated knowledge base, every AI tool reads from it: Claude Code, OpenCode, Cursor, Windsurf, Gemini CLI. Local SQLite, MIT licensed, zero cloud dependency.
 
-**Status**: Published. `cruxhive-mcp@0.19.2` on PyPI · `@cruxhive/cli@0.20.0` on npm. (0.19: approval gate enforced at retrieval, write-time reconciliation, UI XSS/DNS-rebind hardening, guardrail regex fixes, SQLite WAL. 0.20 CLI: `cruxhive skills sync` — one canonical skills dir distributed to Claude Code/OpenCode/Antigravity dialects; OpenCode wiring renamed AGENT.md → AGENTS.md.)
+**Status**: Published. `cruxhive-mcp@0.19.3` on PyPI · `@cruxhive/cli@0.21.0` on npm. (0.19: approval gate enforced at retrieval, write-time reconciliation, UI XSS/DNS-rebind hardening, guardrail regex fixes, SQLite WAL. 0.20 CLI: `cruxhive skills sync` — one canonical skills dir distributed to Claude Code/OpenCode/Antigravity dialects; OpenCode wiring renamed AGENT.md → AGENTS.md.)
 
 **Enforcement & retrieval** (0.13–0.18): `cruxhive-inject` (UserPromptSubmit hook — forces retrieval-as-context) · `cruxhive-guardrails` (PreToolUse hook — denies secret commits / force-push / merged-migration edits; `--list` to inspect; extend via `.llm/guardrails.toml`). `cruxhive init` wires both by default. Search uses keyword-OR FTS (`store.fts_or_query`) so natural-language queries match.
 
@@ -34,7 +34,7 @@ cruxhive/
 │       ├── cruxhive_mcp/workspace.py        — cross-project rollup
 │       ├── cruxhive_mcp/tools/knowledge.py  — context_search/propose/...
 │       ├── cruxhive_mcp/ui/__init__.py      — FastAPI dashboard
-│       └── tests/                           — 32 pytest tests
+│       └── tests/                           — 115 pytest tests
 ├── scripts/
 │   └── sync-docs.sh   — copy docs/guide.html into the wheel before publish
 ├── .llm/              — this repo's own knowledge base (eats own dog food)
@@ -61,6 +61,17 @@ cruxhive/
 | Sync docs into wheel | `scripts/sync-docs.sh` (runs before each `uv build`) |
 | Reinstall locally | `uv tool install --editable "packages/mcp[ui]" --force` |
 | Smoke test UI | `cruxhive-ui --workspace --port 3847` |
+
+## Release checklist
+
+`scripts/sync-docs.sh` now stamps versions and the test count automatically (via `scripts/stamp-version.sh`) — hand-editing `docs/index.html` or this file's Status line is what let them drift to "0.12" for 7+ minor versions, so don't.
+
+1. Bump `packages/mcp/pyproject.toml` and/or `packages/cli/package.json`.
+2. `scripts/sync-docs.sh` — syncs `docs/guide.html` into the wheel and stamps both version numbers + live test count into `docs/index.html` and this file's Status line.
+3. Review the diff (`git diff docs/index.html CLAUDE.md`) before committing.
+4. `cd packages/mcp && rm -rf dist/ && uv build && uv publish --token "$(awk '/password/{print $3}' ~/.pypirc)"` (if the Python package changed).
+5. `cd packages/cli && npm publish --access=public` (if the CLI changed).
+6. `git push` — this also redeploys cruxhive.com (GitHub Pages, serves `/docs` on `main`).
 
 ## Versioning
 

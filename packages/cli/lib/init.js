@@ -258,17 +258,6 @@ Present the result as-is. Do NOT start implementing — wait for the user to con
 
 If the queue is non-empty, ask the user whether they'd like to approve or reject each entry interactively — for each, propose calling \`context_approve\` with their git username or \`context_reject\`.`,
   },
-  propose: {
-    description: "Propose a new knowledge entry for human review. Usage: /propose",
-    body: `Help the user write a new CruxHive knowledge entry. Ask for:
-
-1. **Type** — one of: fact, decision, plan, pattern, constraint, research, outcome
-2. **Topic** — one to three words (e.g. "auth", "database-schema", "ci-cd-tokens")
-3. **Scope** — personal | project | org (default: project)
-4. **Content** — the body. Explain what's true, when, and why.
-
-Then call the \`context_propose\` MCP tool with those arguments. After it returns, remind the user that the entry is pending until approved via \`/review\` or \`cruxhive ui\`.`,
-  },
   "write-plan": {
     description: "Write a new plan file to .llm/plans/ and register it in active.md.",
     body: `Help the user draft a plan. Ask for:
@@ -280,64 +269,31 @@ Then call the \`context_propose\` MCP tool with those arguments. After it return
 
 Then call the \`context_write_plan\` MCP tool with \`plan_name\` and \`content\` (the full markdown).`,
   },
-  summarize: {
-    description: "Distill the current session into a single structured research entry (Background / Done / Decisions / Open questions / Next steps). One queued proposal, not N. Use at session end.",
-    body: `Produce a single structured summary of the current session and file it as ONE research-type CruxHive entry. Do NOT call \`context_propose\` more than once.
-
-## Step 1 — Draft the summary
-
-Re-read the conversation. Build a markdown body with exactly these sections (omit any that have no content):
-
-\`\`\`markdown
-## Background
-1-3 sentences describing what the user was working on and why.
-
-## What was done
-Bullet list. Concrete actions taken (commits, PRs, decisions, refactors). Skip thinking-out-loud.
-
-## Decisions
-Bullet list of choices made between alternatives. Each line: "Chose X over Y because Z".
-
-## Open questions
-Things the user mentioned but didn't resolve. Things you (the AI) flagged as unclear.
-
-## Next steps
-Bullet list. What the user said they'd do next, or what would logically come next.
-\`\`\`
-
-Keep the whole thing under 600 words. If the session was short or unfocused, say so honestly and stop.
-
-## Step 2 — Pick a topic
-
-1-3 words summarizing what the session was about (e.g. "auth-refactor", "deploy-debug", "observability-wave"). Lowercase, hyphenated.
-
-## Step 3 — Dedup check
-
-Call \`context_search\` with the topic. If a similar research entry was filed recently (look for matching type=research with the same topic), append-update the existing one (suggest editing it directly to the user). Otherwise proceed.
-
-## Step 4 — File it
-
-Call \`context_propose\` ONCE with:
-- type: \`research\`
-- topic: the topic from Step 2
-- content: the full markdown body from Step 1
-- scope: \`project\`
-
-## Step 5 — Confirm
-
-Print one line: \`Summary filed → .llm/pending/research_<topic>.md · approve via /review or cruxhive ui\`
-
-## Refusals
-
-If the conversation has fewer than 5 substantive exchanges, stop and say: "Not enough conversation to summarize." Do NOT file an empty entry.
-
-If the user explicitly says "don't save this" or "private" anywhere in the conversation, stop and say: "Skipping — user requested no persistence."`,
-  },
   extract: {
-    description: "Distill the current conversation into proposed CruxHive knowledge entries. Dedupes, classifies, and queues for /review.",
-    body: `You are extracting durable knowledge from the conversation so far. Make zero file changes directly — only call \`context_search\` (read) and \`context_propose\` (queue for human approval).
+    description: "Distill the current conversation into proposed CruxHive knowledge entries, or file a single supplied fact, or produce one session-summary entry. Dedupes, classifies, and queues for /review. Replaces /propose and /summarize.",
+    body: `## Routing
 
-## Step 1 — Identify candidates
+\`/extract\` (all modes) → propose queue, human-gated. \`/remember\` → DIRECT write to memory files, no queue — only for platform/project reference facts and behavioral rules whose truth is already established. Discovered knowledge, decisions, and outcomes go through \`/extract\`.
+
+## Modes
+
+\`/extract\` has three modes, chosen by how it's invoked:
+
+1. **Sweep mode** (default — \`/extract\` with no argument) — re-reads the whole conversation, finds every durable candidate, classifies, dedups, and asks the user which to file.
+2. **Single-entry mode** (\`/extract <inline fact>\`) — the user supplies one specific fact/decision inline (e.g. \`/extract we decided X because Y\`). Skip the session sweep and propose just that one entry. This replaces the old \`/propose\`.
+3. **Session-summary mode** (\`/extract --summary\`) — produces exactly ONE research-type entry with Background / Done / Decisions / Open questions / Next steps. Use at session end when N granular entries would be noise. This replaces the old \`/summarize\`.
+
+## Universal refusal (applies to all modes)
+
+If the user explicitly says "don't save this" or "private" anywhere in the conversation, stop and say: "Skipping — user requested no persistence." Never propose a secret, token, password, or other credential — silently skip these.
+
+---
+
+## Mode 1 — Sweep mode (default)
+
+Make zero file changes directly — only call \`context_search\` (read) and \`context_propose\` (queue for human approval).
+
+### Step 1 — Identify candidates
 
 Re-read the conversation. List items that meet ALL of:
 
@@ -360,7 +316,7 @@ Skip: questions, half-thoughts, debugging traces, hypotheticals, things you (the
 
 If the conversation has fewer than 5 substantive exchanges, stop and say: "Not enough conversation to extract from yet."
 
-## Step 2 — Dedup against existing knowledge
+### Step 2 — Dedup against existing knowledge
 
 For EACH candidate, call \`context_search\` with the candidate's topic plus 2–3 keywords. Look at the top result.
 
@@ -368,7 +324,7 @@ For EACH candidate, call \`context_search\` with the candidate's topic plus 2–
 - If a similar entry exists BUT the new info refines or contradicts it → mark \`[UPDATE: <path>]\`.
 - If no similar entry → mark \`[NEW]\`.
 
-## Step 3 — Present for review
+### Step 3 — Present for review
 
 Print candidates as a numbered list, terse:
 
@@ -382,7 +338,7 @@ Print candidates as a numbered list, terse:
 
 Then ask exactly: "Which would you like to propose? (numbers, 'all-new', or 'none')"
 
-## Step 4 — File approved candidates
+### Step 4 — File approved candidates
 
 For each user-selected \`[NEW]\` candidate, call \`context_propose\` with:
 
@@ -393,15 +349,83 @@ For each user-selected \`[NEW]\` candidate, call \`context_propose\` with:
 
 For \`[UPDATE]\` candidates, do NOT call \`context_propose\`. Instead show the existing entry's path and suggest the user edit it directly.
 
-## Step 5 — Wrap up
+### Step 5 — Wrap up
 
 After all approved candidates are filed, print a one-line summary:
 
 > Filed N new candidate(s) to \`.llm/pending/\`. Run \`/review\` (or \`cruxhive ui\`) to approve or reject.
 
-## Output style
+### Output style
 
-Terse. No prose explanations. The candidates list + the review question + the final summary line are the only required output.`,
+Terse. No prose explanations. The candidates list + the review question + the final summary line are the only required output.
+
+---
+
+## Mode 2 — Single-entry mode
+
+Trigger: \`/extract\` invoked with text after it (anything that isn't exactly \`--summary\` or \`summary\`).
+
+1. If the user supplied inline text, take it as the fact/decision/etc verbatim — do not sweep the whole conversation. If \`/extract\` was invoked with no text at all (bare), ask for the same four fields the old \`/propose\` asked for: **Type**, **Topic**, **Scope**, **Content**.
+2. Classify it as exactly one of: fact, decision, constraint, pattern, plan, research, outcome. Only ask the user if genuinely ambiguous.
+3. Pick a topic (1-3 words) and scope (\`personal\` | \`project\` | \`org\`, default \`project\`).
+4. Call \`context_search\` with the topic to check for a near-duplicate or an entry this should update instead (same rule as Sweep mode Step 2). If it's a dup, say so and stop. If it should update an existing entry, show that entry's path and suggest the user edit it directly instead of proposing.
+5. Call \`context_propose\` ONCE with \`type\`, \`topic\`, \`content\` (the supplied text, expanded with enough context to stand alone), \`scope\`.
+6. Confirm: "Filed → \`.llm/pending/<type>_<topic>.md\` · approve via \`/review\` or \`cruxhive ui\`."
+
+---
+
+## Mode 3 — Session-summary mode (\`--summary\`)
+
+Trigger: \`/extract --summary\` (or \`/extract summary\`).
+
+Produce a single structured summary of the current session and file it as ONE research-type CruxHive entry. Do NOT call \`context_propose\` more than once.
+
+### Step 1 — Draft the summary
+
+Re-read the conversation. Build a markdown body with exactly these sections (omit any that have no content):
+
+\`\`\`markdown
+## Background
+1-3 sentences describing what the user was working on and why.
+
+## What was done
+Bullet list. Concrete actions taken (commits, PRs, decisions, refactors). Skip thinking-out-loud.
+
+## Decisions
+Bullet list of choices made between alternatives. Each line: "Chose X over Y because Z".
+
+## Open questions
+Things the user mentioned but didn't resolve. Things you (the AI) flagged as unclear.
+
+## Next steps
+Bullet list. What the user said they'd do next, or what would logically come next.
+\`\`\`
+
+Keep the whole thing under 600 words. If the session was short or unfocused, say so honestly and stop.
+
+### Step 2 — Pick a topic
+
+1-3 words summarizing what the session was about (e.g. "auth-refactor", "deploy-debug", "observability-wave"). Lowercase, hyphenated.
+
+### Step 3 — Dedup check
+
+Call \`context_search\` with the topic. If a similar research entry was filed recently (look for matching type=research with the same topic), append-update the existing one (suggest editing it directly to the user). Otherwise proceed.
+
+### Step 4 — File it
+
+Call \`context_propose\` ONCE with:
+- type: \`research\`
+- topic: the topic from Step 2
+- content: the full markdown body from Step 1
+- scope: \`project\`
+
+### Step 5 — Confirm
+
+Print one line: \`Summary filed → .llm/pending/research_<topic>.md · approve via /review or cruxhive ui\`
+
+### Refusals
+
+If the conversation has fewer than 5 substantive exchanges, stop and say: "Not enough conversation to summarize." Do NOT file an empty entry.`,
   },
 };
 
@@ -409,6 +433,18 @@ function writeCommandFile(filePath, name, def, dialect) {
   const relPath = dialect === "antigravity"
     ? `.agents/skills/${name}/SKILL.md`
     : `${dialect}/commands/${name}.md`;
+
+  // Don't shadow an existing global Claude skill: a project-local
+  // .claude/commands/<name>.md wins over ~/.claude/skills/<name> in Claude Code,
+  // so stamping our thin MCP-backed command would silently override a richer
+  // skill the user already installed by that name. Skip and defer to theirs.
+  if (dialect === ".claude") {
+    const skillsDir = join(homedir(), ".claude", "skills");
+    if (existsSync(join(skillsDir, `${name}.md`)) || existsSync(join(skillsDir, name, "SKILL.md"))) {
+      info(`${relPath} — a global ~/.claude/skills/${name} exists; skipped to avoid shadowing it`);
+      return;
+    }
+  }
 
   if (existsSync(filePath)) {
     info(`${relPath} already exists — skipped`);
@@ -423,7 +459,35 @@ function writeCommandFile(filePath, name, def, dialect) {
   ok(`${relPath} created`);
 }
 
+// Commands retired by the /propose + /summarize -> /extract consolidation.
+// writeCommandFile() skips files that already exist, so without this,
+// projects that ran an older `init` keep these dead slash commands forever.
+// Match on the exact description we used to stamp, so a file the user has
+// since edited is left alone rather than silently deleted.
+const REMOVED_COMMANDS = {
+  propose: "Propose a new knowledge entry for human review. Usage: /propose",
+  summarize: "Distill the current session into a single structured research entry (Background / Done / Decisions / Open questions / Next steps). One queued proposal, not N. Use at session end.",
+};
+
+function removeStaleCommandFile(filePath, name, relPath) {
+  if (!existsSync(filePath)) return;
+  const expected = REMOVED_COMMANDS[name];
+  const content = readFileSync(filePath, "utf8");
+  if (!content.includes(expected)) return;
+  unlinkSync(filePath);
+  ok(`${relPath} removed — replaced by /extract`);
+}
+
+function cleanupRemovedCommands(cwd) {
+  for (const name of Object.keys(REMOVED_COMMANDS)) {
+    removeStaleCommandFile(join(cwd, ".claude", "commands", `${name}.md`), name, `.claude/commands/${name}.md`);
+    removeStaleCommandFile(join(cwd, ".opencode", "commands", `${name}.md`), name, `.opencode/commands/${name}.md`);
+    removeStaleCommandFile(join(cwd, ".agents", "skills", name, "SKILL.md"), name, `.agents/skills/${name}/SKILL.md`);
+  }
+}
+
 function wireSlashCommands(cwd) {
+  cleanupRemovedCommands(cwd);
   for (const [name, def] of Object.entries(SLASH_COMMANDS)) {
     writeCommandFile(join(cwd, ".claude", "commands", `${name}.md`), name, def, ".claude");
     writeCommandFile(join(cwd, ".opencode", "commands", `${name}.md`), name, def, ".opencode");
