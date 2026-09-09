@@ -4,7 +4,7 @@
 
 CruxHive is a team AI knowledge governance layer. One human-curated knowledge base, every AI tool reads from it: Claude Code, OpenCode, Cursor, Windsurf, Gemini CLI. Local SQLite, MIT licensed, zero cloud dependency.
 
-**Status**: Published. `cruxhive-mcp@0.19.3` on PyPI · `@cruxhive/cli@0.21.0` on npm. (0.19: approval gate enforced at retrieval, write-time reconciliation, UI XSS/DNS-rebind hardening, guardrail regex fixes, SQLite WAL. 0.20 CLI: `cruxhive skills sync` — one canonical skills dir distributed to Claude Code/OpenCode/Antigravity dialects; OpenCode wiring renamed AGENT.md → AGENTS.md.)
+**Status**: Published. `cruxhive-mcp@0.20.0` on PyPI · `@cruxhive/cli@0.22.0` on npm. (0.19: approval gate enforced at retrieval, write-time reconciliation, UI XSS/DNS-rebind hardening, guardrail regex fixes, SQLite WAL. 0.20 CLI: `cruxhive skills sync` — one canonical skills dir distributed to Claude Code/OpenCode/Antigravity dialects; OpenCode wiring renamed AGENT.md → AGENTS.md.)
 
 **Enforcement & retrieval** (0.13–0.18): `cruxhive-inject` (UserPromptSubmit hook — forces retrieval-as-context) · `cruxhive-guardrails` (PreToolUse hook — denies secret commits / force-push / merged-migration edits; `--list` to inspect; extend via `.llm/guardrails.toml`). `cruxhive init` wires both by default. Search uses keyword-OR FTS (`store.fts_or_query`) so natural-language queries match.
 
@@ -34,7 +34,7 @@ cruxhive/
 │       ├── cruxhive_mcp/workspace.py        — cross-project rollup
 │       ├── cruxhive_mcp/tools/knowledge.py  — context_search/propose/...
 │       ├── cruxhive_mcp/ui/__init__.py      — FastAPI dashboard
-│       └── tests/                           — 115 pytest tests
+│       └── tests/                           — 120 pytest tests
 ├── scripts/
 │   └── sync-docs.sh   — copy docs/guide.html into the wheel before publish
 ├── .llm/              — this repo's own knowledge base (eats own dog food)
