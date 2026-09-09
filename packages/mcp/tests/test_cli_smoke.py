@@ -118,6 +118,35 @@ def test_cruxhive_propose_rejects_invalid_type(initialized_project):
     assert "Invalid" in err or "invalid" in err.lower()
 
 
+@pytest.mark.skipif(not _bin_available("cruxhive-propose"), reason="cruxhive-propose not on PATH")
+def test_cruxhive_propose_logs_context_propose_event(initialized_project):
+    """CLI-driven proposals must be visible to `cruxhive stats` (events.summary()).
+
+    Regression test: propose() used to skip events entirely because only the
+    MCP tool path (context_propose, via @events.trace) logged — this binary
+    bypassed the decorator, so `cruxhive stats` always showed 0 proposals for
+    CLI-driven entries regardless of CRUXHIVE_ANALYTICS.
+    """
+    r = subprocess.run(
+        ["cruxhive-propose", "fact", "event-test"],
+        cwd=initialized_project, capture_output=True, text=True,
+        input="A simple test fact.", timeout=30,
+        env={
+            "CRUXHIVE_ANALYTICS": "1",
+            "HOME": str(initialized_project),
+            "PATH": __import__("os").environ.get("PATH", ""),
+        },
+    )
+    assert r.returncode == 0, f"stdout: {r.stdout}\nstderr: {r.stderr}"
+
+    from cruxhive_mcp import events, store
+
+    conn = store.connect(str(initialized_project))
+    s = events.summary(conn, days=7)
+    conn.close()
+    assert s["proposals"] >= 1
+
+
 # ── cruxhive-review (lists pending as JSON) ──────────────────────────────────
 
 @pytest.mark.skipif(not _bin_available("cruxhive-review"), reason="cruxhive-review not on PATH")
