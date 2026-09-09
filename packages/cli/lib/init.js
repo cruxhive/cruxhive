@@ -63,8 +63,6 @@ function hasBin(name) {
   return spawnSync(name, ["--version"], { stdio: "pipe" }).status === 0;
 }
 
-// `cruxhive` has no --version flag (unknown args exit 1), so hasBin() would
-// misreport it as absent even when installed — use --help, which exits 0.
 // Needed because `npx @cruxhive/cli init` (the README's other install path)
 // doesn't leave `cruxhive` on PATH afterward: commands printed in the
 // next-steps banner below would 127 unless we detect that and fall back to
@@ -73,8 +71,21 @@ function hasBin(name) {
 // equivalent for every command (e.g. cruxhive-review just dumps pending
 // JSON for this file to consume; the real interactive/bulk review flow only
 // exists here in the JS CLI).
-function hasCruxhiveOnPath() {
-  return spawnSync("cruxhive", ["--help"], { stdio: "ignore" }).status === 0;
+//
+// Checking "does `cruxhive` resolve on PATH right now" (e.g. spawnSync or
+// `which`) does NOT work here and was shipped broken in 0.22.1: npx
+// prepends its own ephemeral cache dir (~/.npm/_npx/<hash>/node_modules/
+// .bin/) to PATH for the duration of THIS SAME invocation, so that check
+// always finds npx's own temporary shim for the command currently running
+// and reports "yes, on PATH" — even though that shim vanishes the instant
+// this process exits. Confirmed live: `which cruxhive` succeeds from
+// inside an npx-run `init`, but fails immediately after in the same shell.
+// Instead, ask where THIS invocation was actually launched from: if it's
+// inside an npx cache dir, it's ephemeral regardless of what PATH
+// resolution says right now. A persistent `npm install -g` invocation's
+// argv[1] lives under the global node_modules tree, never `_npx`.
+function wasInvokedViaNpx() {
+  return /[\\/]_npx[\\/]/.test(process.argv[1] || "");
 }
 
 // ─── install cruxhive-mcp ──────────────────────────────────────────────────
@@ -949,9 +960,9 @@ async function init(_args) {
   step("8/8  Automation hooks");
   wireAutomationHooks(cwd);
 
-  const onPath = hasCruxhiveOnPath();
-  const cx = onPath ? "cruxhive" : "npx @cruxhive/cli";
-  const pathNote = onPath ? "" : `
+  const viaNpx = wasInvokedViaNpx();
+  const cx = viaNpx ? "npx @cruxhive/cli" : "cruxhive";
+  const pathNote = !viaNpx ? "" : `
 \x1b[33m!\x1b[0m  \x1b[36mcruxhive\x1b[0m isn't on PATH (this ran via npx, which doesn't install it).
    Every command below needs the \x1b[36mnpx @cruxhive/cli\x1b[0m prefix shown, or run
    \x1b[36mnpm install -g @cruxhive/cli\x1b[0m once to use the short form from now on.
