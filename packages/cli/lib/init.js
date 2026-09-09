@@ -15,6 +15,27 @@ const {
 const { homedir } = require("os");
 const { join, dirname, relative, resolve } = require("path");
 
+// Best-effort read of ~/.cruxhive/config.yaml's `solo.enabled` — just enough
+// to decide which next-steps hint to print. No YAML dependency: the file is
+// always written by workspace.py's save_config() in the simple two-line
+// `solo:\n  enabled: true` shape, so a manual scan is sufficient here. Misses
+// CRUXHIVE_SOLO env-var-only solo mode — that's fine, `cruxhive doctor`
+// (cli.py's doctor(), which checks workspace.is_solo() directly) is the
+// complete check; this is just a convenience hint.
+function isSoloEnabledInConfig() {
+  try {
+    const cfgPath = join(homedir(), ".cruxhive", "config.yaml");
+    if (!existsSync(cfgPath)) return false;
+    const text = readFileSync(cfgPath, "utf8");
+    const section = text.match(/^solo:\s*\n((?:[ \t]+\S.*\n?)*)/m);
+    if (!section) return false;
+    const enabledLine = section[1].match(/^\s*enabled:\s*(\S+)/m);
+    return !!enabledLine && enabledLine[1].toLowerCase() === "true";
+  } catch {
+    return false;
+  }
+}
+
 const CONTEXT_TEMPLATE = (projectName, date) => `---
 type: fact
 scope: project
@@ -968,6 +989,10 @@ async function init(_args) {
    \x1b[36mnpm install -g @cruxhive/cli\x1b[0m once to use the short form from now on.
 `;
 
+  const soloHint = isSoloEnabledInConfig()
+    ? `  4. \x1b[33m!\x1b[0m  Solo mode is already ON — proposals auto-approve without review.\n     Disable: \x1b[36m${cx} solo --disable\x1b[0m`
+    : `  4. Working solo? \x1b[36m${cx} solo --enable\x1b[0m skips the approval queue.`;
+
   console.log(`
 \x1b[32m✓ CruxHive initialized in ${projectName}\x1b[0m
 ${pathNote}
@@ -975,7 +1000,7 @@ Next steps:
   1. Edit \x1b[36m.llm/CONTEXT.md\x1b[0m — describe your project, stack, and conventions
   2. Run \x1b[36m${cx} index\x1b[0m to build the search index
   3. Reload your AI tool — MCP tools are now available
-  4. Working solo? \x1b[36m${cx} solo --enable\x1b[0m skips the approval queue.
+${soloHint}
 
 Docs: https://cruxhive.com/guide.html
 `);

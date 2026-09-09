@@ -113,6 +113,8 @@ def propose() -> None:
     """cruxhive-propose: write a pending knowledge entry from stdin args."""
     # Usage: cruxhive-propose <type> <topic> [scope]
     # Content is read from stdin.
+    import time as _time
+    t0 = _time.perf_counter()
     args = sys.argv[1:]
     if len(args) < 2:
         print("Usage: cruxhive-propose <type> <topic> [scope]", file=sys.stderr)
@@ -179,6 +181,21 @@ def propose() -> None:
         print(f"  \033[33m⚠\033[0m  {vmsg}", file=sys.stderr)
     try:
         _store.index(root)
+    except Exception:
+        pass
+
+    # The MCP tool path (context_propose) logs via @events.trace automatically;
+    # this CLI entry point bypasses that decorator entirely, so without this
+    # call every CLI-driven proposal was invisible to `cruxhive stats` /
+    # events.summary() regardless of CRUXHIVE_ANALYTICS. client_name='cli'
+    # matches the convention `search()` (below) already uses for this binary.
+    try:
+        from . import events as _events
+        _events.set_client("cli", "")
+        _events.log(
+            root, "context_propose", query=topic, result_n=None,
+            ms=int((_time.perf_counter() - t0) * 1000),
+        )
     except Exception:
         pass
 
@@ -513,6 +530,17 @@ def doctor() -> None:
 
     def fail(msg: str) -> None:
         problems.append(msg)
+
+    # Solo mode visibility — while it's on, `context_propose` auto-approves
+    # entries with no human review step. Doctor had zero awareness of this;
+    # surface it as a warning (not a failure) so it doesn't flip exit code.
+    from . import workspace as _ws
+    solo_enabled, _solo_approver = _ws.is_solo()
+    if solo_enabled:
+        warn(
+            "Solo mode is ON — proposals auto-approve without a human review "
+            "step. Disable with `cruxhive solo --disable` if that's not intended."
+        )
 
     # .llm/CONTEXT.md
     ctx = root / ".llm" / "CONTEXT.md"

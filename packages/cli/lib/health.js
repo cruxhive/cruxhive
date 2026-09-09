@@ -31,6 +31,18 @@ function parseFrontmatter(content) {
   return obj;
 }
 
+// Mirrors store.py's _SQL_APPROVED / list_pending: a file only counts as
+// "pending approval" when it's an AI proposal that hasn't been approved yet.
+// memoryDir/contextDir/plansDir legitimately hold hand-authored files with no
+// approved_by field — that's normal for source:human content, not a sign
+// something needs review — so `!fm.approved_by` alone was flagging every one
+// of those as pending.
+function isPendingApproval(fm) {
+  if (fm.source !== "ai-proposed") return false;
+  const approvedBy = (fm.approved_by || "").trim().toLowerCase();
+  return approvedBy === "" || approvedBy === "~" || approvedBy === "null" || approvedBy === "none";
+}
+
 function badge(ok) {
   return ok ? "\x1b[32m✓\x1b[0m" : "\x1b[31m✗\x1b[0m";
 }
@@ -64,6 +76,7 @@ async function health(_args) {
   const plansDir = join(cwd, ".llm", "plans");
   const memoryDir = join(cwd, ".llm", "memory");
   const contextDir = join(cwd, ".llm", "context");
+  const pendingDir = join(cwd, ".llm", "pending");
 
   const planCount = countFiles(plansDir) - (existsSync(join(plansDir, "active.md")) ? 1 : 0);
   const memCount = countFiles(memoryDir);
@@ -86,7 +99,7 @@ async function health(_args) {
         if (fm.type) {
           totalEntries++;
           if (fm.type === "constraint") constraintCount++;
-          if (!fm.approved_by || fm.approved_by === "~") pendingCount++;
+          if (isPendingApproval(fm)) pendingCount++;
         }
         const stale = staleCheck(p, 90);
         if (stale) stalePaths.push({ path: f, days: stale });
@@ -97,6 +110,11 @@ async function health(_args) {
   scanDir(memoryDir);
   scanDir(contextDir);
   scanDir(plansDir);
+  // .llm/pending/ is where real ai-proposed, unapproved entries actually
+  // live (see cli.py's propose()) — without scanning it, isPendingApproval()
+  // could never find anything to count and pendingCount stayed 0 regardless
+  // of real queue state.
+  scanDir(pendingDir);
 
   // Output
   fmt("CONTEXT.md", `${badge(contextExists)} ${contextExists ? "present" : "missing"}`,
