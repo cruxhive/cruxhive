@@ -285,6 +285,57 @@ def test_context_approve_returns_not_found_for_bogus_path(tools, project):
     assert "Not found" in result or "not found" in result.lower()
 
 
+def test_context_approve_bulk_approves_every_pending_entry(tools, project, monkeypatch):
+    monkeypatch.delenv("CRUXHIVE_SOLO", raising=False)
+    monkeypatch.setenv("HOME", str(project / "_home"))
+    (project / "_home").mkdir(exist_ok=True)
+    tools["context_propose"](
+        type="fact", topic="bulk-one",
+        content="First claim.", project_root=str(project),
+    )
+    tools["context_propose"](
+        type="fact", topic="bulk-two",
+        content="Second claim.", project_root=str(project),
+    )
+
+    result = tools["context_approve"](
+        paths=[], approver="alice", project_root=str(project),
+    )
+    assert "Approved 2" in result
+
+    conn = _store.connect(str(project))
+    assert _store.list_pending(conn) == []
+    conn.close()
+
+
+def test_context_approve_bulk_subset_of_paths(tools, project, monkeypatch):
+    monkeypatch.delenv("CRUXHIVE_SOLO", raising=False)
+    monkeypatch.setenv("HOME", str(project / "_home"))
+    (project / "_home").mkdir(exist_ok=True)
+    tools["context_propose"](
+        type="fact", topic="subset-keep",
+        content="Keep this pending.", project_root=str(project),
+    )
+    tools["context_propose"](
+        type="fact", topic="subset-approve",
+        content="Approve this one.", project_root=str(project),
+    )
+    approve_path = str(
+        next((project / ".llm" / "pending").glob("fact_subset-approve*.md")).relative_to(project)
+    )
+
+    result = tools["context_approve"](
+        paths=[approve_path], approver="alice", project_root=str(project),
+    )
+    assert "Approved 1" in result
+
+    conn = _store.connect(str(project))
+    remaining = [p["path"] for p in _store.list_pending(conn)]
+    conn.close()
+    assert approve_path not in remaining
+    assert any("subset-keep" in p for p in remaining)
+
+
 # ── context_workspace_search ──────────────────────────────────────────────────
 
 def test_context_workspace_search_aggregates_across_projects(tools, tmp_path, monkeypatch):

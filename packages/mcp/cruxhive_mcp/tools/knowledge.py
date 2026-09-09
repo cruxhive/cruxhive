@@ -428,19 +428,33 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True))
     @_events.trace("context_approve", query_kw="path")
     def context_approve(
-        path: str,
-        approver: str,
+        path: str | None = None,
+        approver: str = "",
         project_root: str | None = None,
+        paths: list[str] | None = None,
     ) -> str:
-        """Approve a pending knowledge proposal.
+        """Approve a pending knowledge proposal, or several at once.
 
         Updates source→human, sets approved_by on disk and in the index.
         path: relative path from project root (e.g. .llm/pending/constraint_auth.md)
+        paths: optional list of relative paths to approve in bulk instead of `path`.
+               Pass an empty list to approve every currently pending entry.
         approver: your git username or name
         """
         root = project_root or os.getcwd()
         try:
             conn = _store.connect(root)
+            if paths is not None:
+                approved = _store.approve_all(
+                    conn, approver, root, paths or None,
+                )
+                conn.close()
+                if approved:
+                    return f"Approved {len(approved)} entr{'y' if len(approved)==1 else 'ies'}: " + ", ".join(f"`{p}`" for p in approved) + f" — approved_by: {approver}"
+                return "No matching pending entries to approve."
+            if not path:
+                conn.close()
+                return "Error: pass either `path` or `paths`."
             ok = _store.approve(conn, path, approver, root)
             conn.close()
             if ok:

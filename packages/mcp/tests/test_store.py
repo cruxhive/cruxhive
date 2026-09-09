@@ -197,6 +197,33 @@ def test_stale_high_confidence_lists_decayed(project):
     assert ".llm/context/old_high.md" in paths
 
 
+def test_rrf_fuse_ranks_fresh_entry_above_decayed_one_on_tied_query(project):
+    """Decay must enter the fused score, not just display — a stale entry
+    (decayed to low confidence) should rank below a fresh, otherwise-equal
+    entry that answers the same query."""
+    today = datetime.date.today().isoformat()
+    very_old = (datetime.date.today() - datetime.timedelta(days=200)).isoformat()
+    _write(project / ".llm" / "context" / "fresh_release.md",
+           f"---\ntype: fact\ntopic: release-cadence-fresh\nvalid_at: {today}\n"
+           "confidence: high\nsource: human\napproved_by: jess\n---\n\n"
+           "Release cadence is weekly on Thursdays.\n")
+    _write(project / ".llm" / "context" / "stale_release.md",
+           f"---\ntype: fact\ntopic: release-cadence-stale\nvalid_at: {very_old}\n"
+           "confidence: high\nsource: human\napproved_by: jess\n---\n\n"
+           "Release cadence is weekly on Thursdays.\n")
+    store.index(str(project))
+    conn = store.connect(str(project))
+    bm25 = store.search_bm25(conn, "release cadence weekly", 10)
+    fused = store.rrf_fuse(bm25, [], conn=conn, query="release cadence weekly")
+    conn.close()
+
+    paths_in_order = [r["path"] for r in fused]
+    assert ".llm/context/fresh_release.md" in paths_in_order
+    assert ".llm/context/stale_release.md" in paths_in_order
+    assert paths_in_order.index(".llm/context/fresh_release.md") < \
+        paths_in_order.index(".llm/context/stale_release.md")
+
+
 # ── Ephemeral entries ─────────────────────────────────────────────────────────
 
 def test_ephemeral_entry_auto_expires_after_ttl(project):

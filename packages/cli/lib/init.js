@@ -523,6 +523,47 @@ function wireAiTools(cwd) {
   for (const t of tools) t.wire();
 }
 
+// ─── git worktree helpers ───────────────────────────────────────────────────
+
+/** Absolute path to this repo's git hooks dir, resolved via git itself so it
+ * works whether `.git` is a real directory or (inside a worktree) a file
+ * containing a `gitdir:` pointer. Returns null if `cwd` isn't a git repo. */
+function gitHooksDir(cwd) {
+  try {
+    const r = spawnSync("git", ["rev-parse", "--git-path", "hooks"],
+      { cwd, stdio: ["ignore", "pipe", "ignore"] });
+    if (r.status !== 0) return null;
+    const out = (r.stdout || "").toString().trim();
+    return out ? resolve(cwd, out) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Absolute path to the MAIN worktree's root (the one holding the real
+ * `.git` directory), resolved via `git rev-parse --git-common-dir` — this
+ * returns the shared `.git` dir's path from ANY worktree. Returns null if
+ * `cwd` isn't a git repo. */
+function gitMainWorktreeRoot(cwd) {
+  try {
+    const r = spawnSync("git", ["rev-parse", "--git-common-dir"],
+      { cwd, stdio: ["ignore", "pipe", "ignore"] });
+    if (r.status !== 0) return null;
+    const out = (r.stdout || "").toString().trim();
+    if (!out) return null;
+    return dirname(resolve(cwd, out));
+  } catch {
+    return null;
+  }
+}
+
+/** Is `cwd` a secondary (non-main) git worktree? Returns { isSecondary, mainRoot }. */
+function detectSecondaryWorktree(cwd) {
+  const mainRoot = gitMainWorktreeRoot(cwd);
+  if (!mainRoot) return { isSecondary: false, mainRoot: null };
+  return { isSecondary: resolve(mainRoot) !== resolve(cwd), mainRoot };
+}
+
 // ─── git + session hooks (automation) ──────────────────────────────────────
 
 const POST_COMMIT_BODY = `#!/usr/bin/env bash
@@ -534,12 +575,17 @@ fi
 `;
 
 function wirePostCommit(cwd) {
-  const gitDir = join(cwd, ".git");
-  if (!existsSync(gitDir)) {
+  // Resolved via git itself (not existsSync(join(cwd, ".git"))): inside a
+  // worktree `.git` is a FILE holding a `gitdir:` pointer, not a directory,
+  // so the old existsSync check passed but `mkdirSync(dirname(hook))` then
+  // threw ENOTDIR trying to mkdir under a file. git rev-parse --git-path
+  // hooks resolves correctly in both cases.
+  const hooksDir = gitHooksDir(cwd);
+  if (!hooksDir) {
     info("not a git repo — skipping post-commit hook");
     return;
   }
-  const hook = join(gitDir, "hooks", "post-commit");
+  const hook = join(hooksDir, "post-commit");
   if (existsSync(hook)) {
     const cur = readFileSync(hook, "utf8");
     if (cur.includes("cruxhive")) {
@@ -549,7 +595,7 @@ function wirePostCommit(cwd) {
     warn("post-commit hook exists (user-customized) — skipping to preserve it");
     return;
   }
-  mkdirSync(dirname(hook), { recursive: true });
+  mkdirSync(hooksDir, { recursive: true });
   writeFileSync(hook, POST_COMMIT_BODY);
   try {
     require("fs").chmodSync(hook, 0o755);
@@ -722,23 +768,32 @@ function wireAutomationHooks(cwd) {
   wireOpenCodePlugin(cwd);
 }
 
-function patchGitignore(cwd) {
+function patchGitignore(cwd, { ignoreLlmDir = false } = {}) {
   const ig = join(cwd, ".gitignore");
-  const entries = [
-    "# CruxHive: local knowledge index, usage log, digest snapshots (do not commit)",
-    ".llm/cruxhive.db",
-    ".llm/cruxhive.db-shm",
-    ".llm/cruxhive.db-wal",
-    ".llm/pending/.cache",
-    ".llm/digests/",
-  ];
+  const entries = ignoreLlmDir
+    ? [
+        "# CruxHive: this worktree's .llm/ is a symlink to the main worktree's",
+        "# shared knowledge base — don't commit a separate copy per branch.",
+        ".llm",
+      ]
+    : [
+        "# CruxHive: local knowledge index, usage log, digest snapshots (do not commit)",
+        ".llm/cruxhive.db",
+        ".llm/cruxhive.db-shm",
+        ".llm/cruxhive.db-wal",
+        ".llm/pending/.cache",
+        ".llm/digests/",
+      ];
   if (!existsSync(ig)) {
     writeFileSync(ig, entries.join("\n") + "\n");
     ok(".gitignore created with CruxHive entries");
     return;
   }
   const cur = readFileSync(ig, "utf8");
-  if (cur.includes("cruxhive.db")) {
+  const alreadyThere = ignoreLlmDir
+    ? /(^|\n)\.llm\/?\s*(\n|$)/.test(cur)
+    : cur.includes("cruxhive.db");
+  if (alreadyThere) {
     info(".gitignore already has CruxHive entries");
     return;
   }
@@ -796,16 +851,41 @@ async function init(_args) {
 
   console.log(`\n\x1b[1mCruxHive init\x1b[0m — ${projectName}`);
 
+  // Detect a secondary git worktree of a repo that's ALREADY been
+  // cruxhive-init'd elsewhere. Without this, every worktree gets its own
+  // independent .llm/ and the knowledge bases diverge per-branch. Symlinking
+  // .llm at the filesystem level needs zero store.py changes — path
+  // resolution there already follows symlinks via .resolve().
+  const { isSecondary, mainRoot } = detectSecondaryWorktree(cwd);
+
   // 0. Personal layer (one-time bootstrap, machine-wide)
   step("0/8  Personal layer (~/.cruxhive/personal/)");
   bootstrapPersonal();
 
   // 1. .llm/ structure
-  step("1/8  Creating .llm/ structure");
-  for (const dir of [".llm", ".llm/plans", ".llm/pending", ".llm/context", ".llm/memory"]) {
-    mkdirSync(join(cwd, dir), { recursive: true });
+  if (isSecondary) {
+    step("1/8  Secondary git worktree detected — linking .llm/");
+    info(`main worktree: ${mainRoot}`);
+    const mainLlm = join(mainRoot, ".llm");
+    if (!existsSync(mainLlm)) {
+      warn(`main worktree has no .llm/ yet — run \`cruxhive init\` there first.`);
+      warn(`Falling back to a normal (independent) .llm/ in this worktree.`);
+      for (const dir of [".llm", ".llm/plans", ".llm/pending", ".llm/context", ".llm/memory"]) {
+        mkdirSync(join(cwd, dir), { recursive: true });
+      }
+      ok("directories: .llm/ .llm/plans/ .llm/pending/ .llm/context/ .llm/memory/");
+    } else {
+      const llmLink = join(cwd, ".llm");
+      trySymlinkTo(llmLink, relative(cwd, mainLlm), ".llm", { cwd, expectResolved: resolve(mainLlm) });
+      info(`this worktree now shares the main worktree's knowledge base`);
+    }
+  } else {
+    step("1/8  Creating .llm/ structure");
+    for (const dir of [".llm", ".llm/plans", ".llm/pending", ".llm/context", ".llm/memory"]) {
+      mkdirSync(join(cwd, dir), { recursive: true });
+    }
+    ok("directories: .llm/ .llm/plans/ .llm/pending/ .llm/context/ .llm/memory/");
   }
-  ok("directories: .llm/ .llm/plans/ .llm/pending/ .llm/context/ .llm/memory/");
 
   const contextPath = join(cwd, ".llm", "CONTEXT.md");
   if (!existsSync(contextPath)) {
@@ -846,9 +926,10 @@ async function init(_args) {
   mkdirSync(memDir, { recursive: true });
   ok(".llm/memory/ ready (will be filled by `cruxhive sync`)");
 
-  // 7. .gitignore — keep cruxhive.db out of git
+  // 7. .gitignore — keep cruxhive.db out of git (or, in a linked secondary
+  // worktree, keep the .llm symlink itself from being committed per-branch)
   step("7/8  .gitignore");
-  patchGitignore(cwd);
+  patchGitignore(cwd, { ignoreLlmDir: isSecondary });
 
   // 8. Automation hooks — git post-commit + SessionStart for Claude/OpenCode
   step("8/8  Automation hooks");
@@ -861,9 +942,17 @@ Next steps:
   1. Edit \x1b[36m.llm/CONTEXT.md\x1b[0m — describe your project, stack, and conventions
   2. Run \x1b[36mcruxhive index\x1b[0m to build the search index
   3. Reload your AI tool — MCP tools are now available
+  4. Working solo? \x1b[36mcruxhive solo --enable\x1b[0m skips the approval queue.
 
 Docs: https://cruxhive.com/guide.html
 `);
 }
 
-module.exports = { init };
+module.exports = {
+  init,
+  // Exported for `cruxhive worktree-link` (lib/worktree-link.js), which
+  // reuses the same worktree-detection + symlink machinery as `init` rather
+  // than duplicating it.
+  gitMainWorktreeRoot,
+  trySymlinkTo,
+};
